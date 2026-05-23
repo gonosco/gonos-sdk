@@ -1,0 +1,34 @@
+{
+  "name": "@gonos/sdk",
+  "version": "0.1.0",
+  "description": "Node.js / TypeScript client for the Gonos background-check API",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "generate": "openapi-typescript ../openapi.json -o src/api.d.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["gonos", "background-check", "cra", "fcra"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "openapi-typescript": "^7.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}
