@@ -12,14 +12,37 @@
  *     last_name: "Doe",
  *     email: "jane@example.com",
  *   });
+ *   const check = await client.checks.create({
+ *     candidate_id: candidate.id,
+ *     package: "standard",
+ *     permissible_purpose: "employment",
+ *   });
  *
- * Type definitions for every endpoint are generated from the committed
- * `openapi.json` artifact via ``npm run generate``. Run that after pulling
- * a new commit to pick up any new endpoints or shape changes.
+ * For endpoints not yet wrapped by a resource, use the low-level
+ * `client.request(...)`. Optionally run `npm run generate` to emit
+ * `src/api.d.ts` from the committed OpenAPI artifact for fully-typed
+ * raw requests.
  */
 
-export {
-  GonosClient,
-  type GonosClientOptions,
-} from "./client.js";
+export { GonosClient, type GonosClientOptions } from "./client.js";
 export * from "./errors.js";
+export * from "./models.js";
+
+// Resource classes and their parameter types.
+export {
+  CandidatesResource,
+  type CandidateCreateParams,
+} from "./resources/candidates.js";
+export { ChecksResource, type CheckCreateParams } from "./resources/checks.js";
+export { ConsentResource, type ConsentCreateParams } from "./resources/consent.js";
+export { ReportsResource } from "./resources/reports.js";
+export {
+  AdverseActionsResource,
+  type AdverseActionCreateParams,
+} from "./resources/adverse_actions.js";
+export { DisputesResource, type DisputeCreateParams } from "./resources/disputes.js";
+export { WebhooksResource } from "./resources/webhooks.js";
+export { AnalyticsResource } from "./resources/analytics.js";
+export { UsageResource } from "./resources/usage.js";
+export { BillingResource } from "./resources/billing.js";
+export { ExportsResource, type ExportCreateParams } from "./resources/exports.js";

@@ -1,9 +1,9 @@
 /**
  * Gonos API client.
  *
- * Thin fetch-based client. For typed request/response shapes, run
- * ``npm run generate`` to produce ``src/api.d.ts`` from the committed
- * OpenAPI artifact, then import those types directly in your callers.
+ * Fetch-based client exposing typed resource namespaces (`client.candidates`,
+ * `client.checks`, …) that mirror the Python SDK. The low-level `request()`
+ * method remains available for endpoints not yet covered by a resource.
  */
 
 import {
@@ -12,6 +12,17 @@ import {
   STATUS_TO_ERROR,
   ValidationError,
 } from "./errors.js";
+import { AdverseActionsResource } from "./resources/adverse_actions.js";
+import { AnalyticsResource } from "./resources/analytics.js";
+import { BillingResource } from "./resources/billing.js";
+import { CandidatesResource } from "./resources/candidates.js";
+import { ChecksResource } from "./resources/checks.js";
+import { ConsentResource } from "./resources/consent.js";
+import { DisputesResource } from "./resources/disputes.js";
+import { ExportsResource } from "./resources/exports.js";
+import { ReportsResource } from "./resources/reports.js";
+import { UsageResource } from "./resources/usage.js";
+import { WebhooksResource } from "./resources/webhooks.js";
 
 export interface GonosClientOptions {
   apiKey: string;
@@ -36,6 +47,19 @@ export class GonosClient {
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
 
+  // Resource namespaces (mirror the Python SDK).
+  readonly candidates: CandidatesResource;
+  readonly checks: ChecksResource;
+  readonly consent: ConsentResource;
+  readonly reports: ReportsResource;
+  readonly adverse_actions: AdverseActionsResource;
+  readonly webhooks: WebhooksResource;
+  readonly disputes: DisputesResource;
+  readonly billing: BillingResource;
+  readonly analytics: AnalyticsResource;
+  readonly exports: ExportsResource;
+  readonly usage: UsageResource;
+
   constructor(opts: GonosClientOptions) {
     if (!opts.apiKey) {
       throw new Error("GonosClient requires an apiKey");
@@ -44,6 +68,18 @@ export class GonosClient {
     this.baseUrl = (opts.baseUrl ?? "https://api.gonos.co").replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
+
+    this.candidates = new CandidatesResource(this);
+    this.checks = new ChecksResource(this);
+    this.consent = new ConsentResource(this);
+    this.reports = new ReportsResource(this);
+    this.adverse_actions = new AdverseActionsResource(this);
+    this.webhooks = new WebhooksResource(this);
+    this.disputes = new DisputesResource(this);
+    this.billing = new BillingResource(this);
+    this.analytics = new AnalyticsResource(this);
+    this.exports = new ExportsResource(this);
+    this.usage = new UsageResource(this);
   }
 
   async request<T = unknown>(opts: RequestOptions): Promise<T> {

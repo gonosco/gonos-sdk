@@ -5,28 +5,19 @@ API. Mirrors the Python SDK shape so docs and examples translate 1:1.
 
 ## Status
 
-This SDK is a scaffold — error handling, auth, the request lifecycle, and the
-type-generation pipeline are wired up; resource-specific helper classes (the
-``client.candidates.create(...)`` style sugar) are not yet present. Use the
-generic ``client.request(...)`` plus generated types from ``api.d.ts`` in the
-interim.
+Typed resource namespaces (`client.candidates`, `client.checks`,
+`client.consent`, `client.reports`, `client.adverse_actions`,
+`client.disputes`, `client.webhooks`, `client.billing`, `client.analytics`,
+`client.exports`, `client.usage`) mirror the Python SDK 1:1, alongside the
+typed error hierarchy and request lifecycle. For endpoints not yet wrapped by
+a resource, the low-level `client.request(...)` remains available (optionally
+typed via `api.d.ts`, see below).
 
 ## Install
 
 ```bash
 npm install @gonos/sdk
 ```
-
-## Generate types
-
-The SDK's types are generated from the committed ``openapi.json`` artifact in
-this repo. After updating the SDK to a new server version:
-
-```bash
-npm run generate
-```
-
-This writes ``src/api.d.ts``.
 
 ## Quick start
 
@@ -39,16 +30,20 @@ const client = new GonosClient({
 });
 
 try {
-  const result = await client.request({
-    method: "POST",
-    path: "/api/v1/candidates",
-    body: {
-      first_name: "Jane",
-      last_name: "Doe",
-      email: "jane@example.com",
-    },
+  const candidate = await client.candidates.create({
+    first_name: "Jane",
+    last_name: "Doe",
+    email: "jane@example.com",
   });
-  console.log("created:", result);
+
+  const check = await client.checks.create({
+    candidate_id: candidate.id,
+    package: "standard",
+    permissible_purpose: "employment",
+  });
+  await client.checks.submit(check.id);
+
+  console.log("submitted check:", check.id);
 } catch (err) {
   if (err instanceof RateLimitError) {
     console.log("rate limited; retry after", err.retry_after, "seconds");
@@ -58,6 +53,26 @@ try {
     throw err;
   }
 }
+```
+
+## Raw requests & generated types
+
+For endpoints without a resource wrapper, call `client.request(...)` directly
+(note the full `/api/v1` path):
+
+```typescript
+const result = await client.request({
+  method: "POST",
+  path: "/api/v1/candidates",
+  body: { first_name: "Jane", last_name: "Doe" },
+});
+```
+
+Optionally generate types for raw requests from the committed `openapi.json`
+artifact:
+
+```bash
+npm run generate   # writes src/api.d.ts
 ```
 
 ## Error handling
