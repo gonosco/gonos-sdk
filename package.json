@@ -19,9 +19,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prebuild": "npm run generate",
     "test": "vitest run",
+    "pretest": "npm run generate",
     "lint": "eslint src",
-    "generate": "openapi-typescript ../openapi.json -o src/api.d.ts"
+    "generate": "openapi-typescript ../openapi.json -o src/api.ts"
   },
   "engines": {
     "node": ">=18"

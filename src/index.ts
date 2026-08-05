@@ -27,6 +27,11 @@
 export { GonosClient, type GonosClientOptions } from "./client.js";
 export * from "./errors.js";
 export * from "./models.js";
+// Typed request/response aliases generated from openapi.json — the
+// spec-accurate shapes for every operation. Prefer these over the
+// hand-written models when you need field-level accuracy (e.g. which
+// fields are nullable, which are optional). See src/api-types.ts.
+export * from "./api-types.js";
 export {
   verifyWebhookSignature,
   Webhook,

@@ -55,24 +55,53 @@ try {
 }
 ```
 
-## Raw requests & generated types
+## Typed request/response shapes
+
+Spec-accurate types for every operation, generated from the committed
+`openapi.json` and exported at the package root:
+
+```typescript
+import type {
+  CandidateCreateBody,
+  CandidateResponse,
+  CheckCreateBody,
+  WebhookEndpointResponse,
+  ErrorEnvelope,
+} from "@gonos/sdk";
+
+// Full spec surface — dive in when you need something not aliased above.
+import type { paths, components } from "@gonos/sdk";
+type BulkImportBody =
+  paths["/api/v1/candidates/bulk"]["post"]["requestBody"]["content"]["application/json"];
+
+// Generic helpers for one-off operations without naming a schema:
+import type { RequestBody, ResponseBody } from "@gonos/sdk";
+type CreateBody = RequestBody<"/api/v1/candidates", "post">;
+type GetOk = ResponseBody<"/api/v1/candidates/{candidate_id}", "get">;
+```
+
+The generated types are the source of truth. The older hand-written
+interfaces in `models.ts` (`Candidate`, `Check`, etc.) are kept for
+backward compatibility but marked `@deprecated` — prefer the generated
+aliases for new code.
+
+## Raw requests
 
 For endpoints without a resource wrapper, call `client.request(...)` directly
 (note the full `/api/v1` path):
 
 ```typescript
-const result = await client.request({
+const result = await client.request<CandidateResponse>({
   method: "POST",
   path: "/api/v1/candidates",
-  body: { first_name: "Jane", last_name: "Doe" },
+  body: { first_name: "Jane", last_name: "Doe" } satisfies CandidateCreateBody,
 });
 ```
 
-Optionally generate types for raw requests from the committed `openapi.json`
-artifact:
+Regenerate the type file manually if needed (auto-runs before every build/test):
 
 ```bash
-npm run generate   # writes src/api.d.ts
+npm run generate   # writes src/api.ts (gitignored)
 ```
 
 ## Error handling

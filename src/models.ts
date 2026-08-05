@@ -1,6 +1,12 @@
 /**
- * SDK response models — mirrors the Python SDK's `gonos_sdk.models` and the
- * server schemas without a server dependency.
+ * SDK response models — hand-written mirrors of the server schemas.
+ *
+ * @deprecated Prefer the generated aliases in ``./api-types.ts`` for
+ * spec-accurate field typing. These hand-written interfaces cover the
+ * happy-path shape but under-report optional/nullable fields the API
+ * actually returns. They stay for backward compatibility with pre-0.2
+ * SDK consumers; new code should use ``CandidateResponse`` /
+ * ``CheckResponse`` / ``WebhookEndpointResponse`` / etc. instead.
  *
  * Each interface carries an index signature (`[key: string]: unknown`) so
  * forward-compatible fields the API may add are preserved and accessible,
