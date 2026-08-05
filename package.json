@@ -13,7 +13,10 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
@@ -23,8 +26,16 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["gonos", "background-check", "cra", "fcra"],
+  "keywords": [
+    "gonos",
+    "background-check",
+    "cra",
+    "fcra"
+  ],
   "license": "MIT",
+  "dependencies": {
+    "standardwebhooks": "^1.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "openapi-typescript": "^7.0.0",

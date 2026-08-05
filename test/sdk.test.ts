@@ -76,6 +76,39 @@ describe("GonosClient resources", () => {
     });
   });
 
+  it("candidates.upsert PUTs to /candidates/by-external-id/{external_id} with URL-encoded id", async () => {
+    const { client, calls } = mockClient(() => ({
+      status: 200,
+      body: {
+        id: "cand_42",
+        first_name: "Jane",
+        last_name: "Doe",
+        external_id: "worker/42 special",
+        organization_id: "org_1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    }));
+
+    const candidate = await client.candidates.upsert({
+      external_id: "worker/42 special",
+      first_name: "Jane",
+      last_name: "Doe",
+    });
+
+    expect(candidate.id).toBe("cand_42");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("PUT");
+    // URL-encoded external_id survives the round-trip — critical for keys
+    // containing slashes, spaces, or other non-URL-safe bytes.
+    expect(calls[0]!.url).toBe(
+      "https://api.example.com/api/v1/candidates/by-external-id/worker%2F42%20special",
+    );
+    // Body carries only the fields, NOT the external_id (URL is authoritative
+    // per the backend contract).
+    expect(calls[0]!.body).toEqual({ first_name: "Jane", last_name: "Doe" });
+  });
+
   it("checks.create defaults the package and forwards the idempotency key", async () => {
     const { client, calls } = mockClient(() => ({
       status: 201,

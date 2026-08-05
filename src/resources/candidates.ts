@@ -43,6 +43,27 @@ export class CandidatesResource extends BaseResource {
     });
   }
 
+  /**
+   * Create-or-update a candidate keyed by the partner-side ``external_id``.
+   *
+   * Wraps ``PUT /candidates/by-external-id/{external_id}``. Prefer this over
+   * the ``create`` → ``DUPLICATE_EXTERNAL_ID`` → look-up-and-``update`` dance
+   * every retry pattern needs. Returns the merged candidate whether it was
+   * created (201) or updated (200); the transport status is not exposed.
+   *
+   * The URL identifies the row; any ``external_id`` on the body is ignored.
+   */
+  upsert(
+    params: { external_id: string } & Partial<Omit<CandidateCreateParams, "external_id">>,
+  ): Promise<Candidate> {
+    const { external_id, ...body } = params;
+    return this.request<Candidate>({
+      method: "PUT",
+      path: `/candidates/by-external-id/${encodeURIComponent(external_id)}`,
+      body,
+    });
+  }
+
   delete(candidateId: string): Promise<void> {
     return this.request<void>({ method: "DELETE", path: `/candidates/${candidateId}` });
   }

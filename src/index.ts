@@ -27,6 +27,13 @@
 export { GonosClient, type GonosClientOptions } from "./client.js";
 export * from "./errors.js";
 export * from "./models.js";
+export {
+  verifyWebhookSignature,
+  Webhook,
+  WebhookVerificationError,
+  type VerifyWebhookOptions,
+  type VerifyWebhookResult,
+} from "./webhooks.js";
 
 // Resource classes and their parameter types.
 export {
