@@ -46,6 +46,10 @@ export interface ConsentSession {
   check_id?: string | null;
   status: string;
   token?: string | null;
+  /** #651: hosted URL where the candidate signs consent. Populated only
+   *  on the creation response. Prefer this over any legacy ``consent_url``. */
+  hosted_url?: string | null;
+  /** @deprecated Always null — use ``hosted_url``. Kept for backward compat. */
   consent_url?: string | null;
   created_at: string;
   [key: string]: unknown;
