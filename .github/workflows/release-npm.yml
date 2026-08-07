@@ -1,0 +1,103 @@
+name: Release to npm
+
+# Publishes @gonos/sdk to npm. Releasing = pushing a tag:
+#
+#   git tag sdk-ts-v0.3.0 && git push origin sdk-ts-v0.3.0
+#
+# The tag version must match the version in ``package.json``.
+#
+# ── Trusted Publisher setup on npmjs.com ─────────────────────────────────
+#
+# On https://www.npmjs.com/package/@gonos/sdk/access → "Trusted Publisher":
+#
+#     Publisher:           GitHub Actions
+#     Organization/user:   <this repo's owner>
+#     Repository:          <this repo's name>
+#     Workflow filename:   release-npm.yml
+#     Environment name:    npm
+#
+# Repo Settings → Environments → New environment → name it exactly ``npm``.
+# No protection-rule options appear for personal-account repos — that's
+# expected. Environment protection rules are free only on public GitHub
+# organizations.
+#
+# ── Provenance ───────────────────────────────────────────────────────────
+#
+# Enabled. This is a public repo, so npm's Sigstore verifier accepts the
+# provenance bundle. Consumers can run ``npm audit signatures`` to
+# cryptographically verify that a given tarball was built by THIS workflow
+# at a specific commit in THIS repo — the supply-chain integrity chain
+# that private-repo publishes cannot offer. See parent repo's
+# ``docs/SDK_MIGRATION_TO_PUBLIC_REPO.md`` (2026-08-07) for why the split.
+on:
+  push:
+    tags:
+      - "sdk-ts-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and verify the tarball
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify tag matches package.json version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          expected="${TAG_NAME#sdk-ts-v}"
+          actual="$(jq -r .version package.json)"
+          if [ "$actual" != "$expected" ]; then
+            echo "Tag version $expected != package.json version $actual" >&2
+            exit 1
+          fi
+          echo "Version OK: $actual"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Verify tarball
+        run: bash scripts/verify-package.sh
+
+  publish:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@gonos/sdk
+    permissions:
+      # Required for npm Trusted Publishing (OIDC) and for --provenance.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # ``access`` also set under ``publishConfig`` in package.json; passed
+      # explicitly here so the command is readable on its own. Public repo
+      # → npm accepts the Sigstore provenance bundle (unlike the private
+      # monorepo, where this failed with 422).
+      - name: Publish
+        run: npm publish --access public --provenance

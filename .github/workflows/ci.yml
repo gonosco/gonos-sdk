@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (regenerates api.ts from openapi.json)
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Verify the tarball a consumer would install
+        # Pack + install into a scratch dir + import by package name. Catches
+        # the class of bug the ``exports`` map / ``dist/*`` mismatch shipped
+        # in 0.1.0 (see repo history + gonos issue #711).
+        run: bash scripts/verify-package.sh

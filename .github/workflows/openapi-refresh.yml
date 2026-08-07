@@ -1,0 +1,93 @@
+name: Refresh openapi.json from the live API
+
+# Fetches https://api.gonos.co/openapi.json daily and opens a PR when the
+# committed ``openapi.json`` has drifted. Two reasons this exists:
+#
+# 1. The SDK's types are generated from ``openapi.json`` (see the
+#    ``generate`` script). When the API adds a field or endpoint, this
+#    workflow surfaces the drift as a reviewable PR rather than letting
+#    the SDK silently ship stale types.
+#
+# 2. This repo split away from the private monorepo where openapi.json
+#    lives. Automatic refresh + PR gate keeps the two in sync without
+#    a manual copy step.
+#
+# The PR is opened, not merged automatically — a human reviews the diff
+# (which will show every added / removed / renamed field) and decides
+# whether to also bump SDK types, cut a release, etc.
+#
+# Manually triggerable via ``workflow_dispatch`` — run from Actions UI
+# when a same-day refresh is needed (e.g. after a coordinated API +
+# SDK release).
+
+on:
+  schedule:
+    # Daily at 07:00 UTC — quiet hour for our target markets.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch current openapi.json from the API
+        run: |
+          curl -fsSL https://api.gonos.co/openapi.json -o openapi.new.json
+          # Normalize whitespace + sort keys so cosmetic diffs don't
+          # trigger PRs. Matches what ``make openapi`` produces in the
+          # monorepo.
+          jq -S . openapi.new.json > openapi.normalized.json
+          mv openapi.normalized.json openapi.json
+          rm openapi.new.json
+
+      - name: Detect drift
+        id: drift
+        run: |
+          if git diff --quiet openapi.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No drift — openapi.json matches the live API."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Drift detected:"
+            git diff --stat openapi.json
+          fi
+
+      - name: Regenerate api.ts and verify build still passes
+        if: steps.drift.outputs.changed == 'true'
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Open PR on drift
+        if: steps.drift.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: openapi-refresh/${{ github.run_id }}
+          title: "chore: refresh openapi.json from live API"
+          commit-message: "chore: refresh openapi.json from live API"
+          body: |
+            The scheduled openapi-refresh workflow detected drift between
+            the committed ``openapi.json`` and what ``https://api.gonos.co/openapi.json``
+            currently returns.
+
+            The generated ``src/api.ts`` has been updated. Build and tests
+            passed against the refreshed spec.
+
+            **Reviewer checklist:**
+
+            - Scan the ``openapi.json`` diff for added/removed/renamed
+              fields on partner-facing endpoints
+            - Decide whether any resource wrapper in ``src/resources/*.ts``
+              needs a matching hand-written change
+            - Decide whether this warrants an SDK version bump / release
+              (added field → minor; changed shape → major)
+          labels: |
+            openapi-drift
+            automated

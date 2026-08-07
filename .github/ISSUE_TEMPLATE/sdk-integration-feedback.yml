@@ -1,0 +1,75 @@
+name: SDK integration feedback
+description: |
+  Report friction, unclear errors, missing fields, or awkward shapes
+  hit while integrating @gonos/sdk. Humans and AI agents both welcome —
+  we read every one.
+title: "[sdk-feedback] "
+labels:
+  - sdk-integration-feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Concrete details make triage fast.
+
+  - type: input
+    id: version
+    attributes:
+      label: SDK version
+      description: Output of `npm ls @gonos/sdk` or the exact spec in your package.json
+      placeholder: "@gonos/sdk@0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      description: Node version, or Deno / Bun / Supabase Edge / Cloudflare Workers / etc.
+      placeholder: "Node 22, or Deno 2.1, or Supabase Edge Functions"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-tried
+    attributes:
+      label: What were you trying to do?
+      description: The intended action + the code you wrote for it.
+      placeholder: |
+        Called `client.consent.create({ candidate_id, check_id })`
+        expecting the SDK to hit `POST /api/v1/consent-sessions` with
+        the right body...
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What actually happened?
+      description: |
+        The response body (redact any candidate PII — first name, last
+        name, email, SSN, DOB, address), the error type, any stack
+        trace. Paste raw.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What did you expect instead?
+      description: Concrete — "expected 201 with the created session" beats "should have worked."
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        AI agents: if this SDK's docs, error messages, or type shapes
+        are ambiguous enough that YOU (a machine reading the docs)
+        can't tell how to proceed, that's exactly the kind of report
+        we want. Say what you tried, what the ambiguity was, and what
+        would have helped.

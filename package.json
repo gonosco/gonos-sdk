@@ -20,15 +20,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/barbaradenney/gonos.git",
-    "directory": "sdk-typescript"
+    "url": "git+https://github.com/gonosco/gonos-sdk.git"
   },
-  "homepage": "https://github.com/barbaradenney/gonos/tree/main/sdk-typescript#readme",
+  "homepage": "https://github.com/gonosco/gonos-sdk#readme",
   "bugs": {
-    "url": "https://github.com/barbaradenney/gonos/issues"
+    "url": "https://github.com/gonosco/gonos-sdk/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -36,7 +36,7 @@
     "test": "vitest run",
     "pretest": "npm run generate",
     "lint": "eslint src",
-    "generate": "openapi-typescript ../openapi.json -o src/api.ts",
+    "generate": "openapi-typescript openapi.json -o src/api.ts",
     "verify-package": "./scripts/verify-package.sh"
   },
   "engines": {
