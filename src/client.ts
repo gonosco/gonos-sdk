@@ -133,6 +133,9 @@ export class GonosClient {
       detail: (data.detail as string | undefined) ?? null,
       error_code: (data.error_code as string | undefined) ?? null,
       correlation_id: (data.correlation_id as string | undefined) ?? null,
+      // Passed through raw; ApiError narrows it, defaulting anything it does
+      // not recognize to "ops" so an unknown kind can never become displayable.
+      kind: (data.kind as string | undefined) ?? null,
     };
     if (ErrorCls === RateLimitError) {
       const retryAfter = resp.headers.get("Retry-After");

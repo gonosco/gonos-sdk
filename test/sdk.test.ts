@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ApiError,
   GonosClient,
   NotFoundError,
   RateLimitError,
@@ -206,5 +207,21 @@ describe("error mapping", () => {
         expect((err as RateLimitError).retry_after).toBe(30);
       },
     );
+  });
+});
+
+describe("ApiError.kind", () => {
+  it("passes through the three published kinds", () => {
+    for (const k of ["user", "retryable", "ops"] as const) {
+      expect(new ApiError({ status_code: 400, error: "e", kind: k }).kind).toBe(k);
+    }
+  });
+
+  it("defaults to ops when absent — an older API deploy must not leak", () => {
+    expect(new ApiError({ status_code: 400, error: "e" }).kind).toBe("ops");
+  });
+
+  it("defaults to ops for an unrecognized kind this SDK predates", () => {
+    expect(new ApiError({ status_code: 400, error: "e", kind: "spicy" }).kind).toBe("ops");
   });
 });

@@ -13,12 +13,36 @@ export class GonosError extends Error {
   }
 }
 
+/**
+ * How to route an error, without maintaining your own code table.
+ *
+ * - `user` — safe to display to an end user; describes something they can
+ *   fix. Surface `detail` (and any field `errors`) in your UI.
+ * - `retryable` — transient. Retry with backoff.
+ * - `ops` — your team must act (credentials, scopes, plan limits, bugs).
+ *   Alert on it; never show `detail` to an end user.
+ */
+export type ErrorKind = "user" | "retryable" | "ops";
+
 export class ApiError extends GonosError {
   status_code: number;
   error: string;
   detail: string | null;
   error_code: string | null;
   correlation_id: string | null;
+  /**
+   * Audience classification — branch on this instead of on `status_code`.
+   *
+   * Defaults to `"ops"` when absent or unrecognized, which is the safe
+   * direction: an error you cannot classify is never shown to an end user.
+   * That also means a Gonos deploy older than this field, or a future kind
+   * this SDK predates, degrades to "alert the team" rather than to a leak.
+   *
+   *     if (e instanceof ApiError && e.kind === "user") showToUser(e.detail);
+   *     else if (e.kind === "retryable") await retry();
+   *     else alertOncall(e.correlation_id);
+   */
+  kind: ErrorKind;
 
   constructor(opts: {
     status_code: number;
@@ -26,6 +50,7 @@ export class ApiError extends GonosError {
     detail?: string | null;
     error_code?: string | null;
     correlation_id?: string | null;
+    kind?: string | null;
   }) {
     super(`[${opts.status_code}] ${opts.detail ?? opts.error}`);
     this.name = this.constructor.name;
@@ -34,6 +59,8 @@ export class ApiError extends GonosError {
     this.detail = opts.detail ?? null;
     this.error_code = opts.error_code ?? null;
     this.correlation_id = opts.correlation_id ?? null;
+    this.kind =
+      opts.kind === "user" || opts.kind === "retryable" ? opts.kind : "ops";
   }
 }
 
