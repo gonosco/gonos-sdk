@@ -1,5 +1,8 @@
+// Paths below are host-relative — `/api/v1` is applied by
+// `BaseResource.request`, not written into each path here.
 import { BaseResource } from "./base.js";
-import type { Candidate, Paginated } from "../models.js";
+import type { CandidateResponse } from "../api-types.js";
+import type { Paginated } from "../models.js";
 
 export interface CandidateCreateParams {
   first_name: string;
@@ -16,16 +19,16 @@ export interface CandidateCreateParams {
 }
 
 export class CandidatesResource extends BaseResource {
-  create(params: CandidateCreateParams): Promise<Candidate> {
-    return this.request<Candidate>({ method: "POST", path: "/candidates", body: params });
+  create(params: CandidateCreateParams): Promise<CandidateResponse> {
+    return this.request<CandidateResponse>({ method: "POST", path: "/candidates", body: params });
   }
 
-  get(candidateId: string): Promise<Candidate> {
-    return this.request<Candidate>({ method: "GET", path: `/candidates/${candidateId}` });
+  get(candidateId: string): Promise<CandidateResponse> {
+    return this.request<CandidateResponse>({ method: "GET", path: `/candidates/${candidateId}` });
   }
 
-  list(params: { page?: number; per_page?: number } = {}): Promise<Paginated<Candidate>> {
-    return this.request<Paginated<Candidate>>({
+  list(params: { page?: number; per_page?: number } = {}): Promise<Paginated<CandidateResponse>> {
+    return this.request<Paginated<CandidateResponse>>({
       method: "GET",
       path: "/candidates",
       query: { page: params.page ?? 1, per_page: params.per_page ?? 25 },
@@ -35,8 +38,8 @@ export class CandidatesResource extends BaseResource {
   update(
     candidateId: string,
     fields: Partial<CandidateCreateParams> & Record<string, unknown>,
-  ): Promise<Candidate> {
-    return this.request<Candidate>({
+  ): Promise<CandidateResponse> {
+    return this.request<CandidateResponse>({
       method: "PATCH",
       path: `/candidates/${candidateId}`,
       body: fields,
@@ -55,9 +58,9 @@ export class CandidatesResource extends BaseResource {
    */
   upsert(
     params: { external_id: string } & Partial<Omit<CandidateCreateParams, "external_id">>,
-  ): Promise<Candidate> {
+  ): Promise<CandidateResponse> {
     const { external_id, ...body } = params;
-    return this.request<Candidate>({
+    return this.request<CandidateResponse>({
       method: "PUT",
       path: `/candidates/by-external-id/${encodeURIComponent(external_id)}`,
       body,

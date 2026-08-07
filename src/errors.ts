@@ -24,12 +24,41 @@ export class GonosError extends Error {
  */
 export type ErrorKind = "user" | "retryable" | "ops";
 
+/**
+ * #733 (0.1.1): the shape the API sends in a 422 response body.
+ * Populated from ``errors: [{field, message, type}]`` server-side.
+ * Preserved on ``ApiError.field_errors`` so callers can route per-field
+ * UX (highlight the failing input, show its message inline) without
+ * regexing ``detail``.
+ */
+export interface FieldError {
+  field: string;
+  message: string;
+  type?: string;
+}
+
 export class ApiError extends GonosError {
   status_code: number;
   error: string;
   detail: string | null;
   error_code: string | null;
   correlation_id: string | null;
+  /**
+   * Per-field validation errors from a 422 response. Empty array when
+   * the API didn't send an ``errors[]`` field (any status other than
+   * 422, or an older Gonos deploy). Callers should treat empty as
+   * "no per-field information available," not as "no errors."
+   */
+  field_errors: FieldError[];
+  /**
+   * One-line human-actionable copy from the API's ``fix_suggestion``
+   * field (added in Gonos PR #618). ``null`` when the API didn't
+   * include one, which is the vast majority of responses — populated
+   * mostly on 422 and specific 409 responses where the fix is
+   * mechanical (e.g. "call ``PUT /candidates/by-external-id/…``
+   * instead"). Safe to surface to end users when non-null.
+   */
+  fix_suggestion: string | null;
   /**
    * Audience classification — branch on this instead of on `status_code`.
    *
@@ -51,6 +80,8 @@ export class ApiError extends GonosError {
     error_code?: string | null;
     correlation_id?: string | null;
     kind?: string | null;
+    field_errors?: FieldError[] | null;
+    fix_suggestion?: string | null;
   }) {
     super(`[${opts.status_code}] ${opts.detail ?? opts.error}`);
     this.name = this.constructor.name;
@@ -59,6 +90,8 @@ export class ApiError extends GonosError {
     this.detail = opts.detail ?? null;
     this.error_code = opts.error_code ?? null;
     this.correlation_id = opts.correlation_id ?? null;
+    this.field_errors = Array.isArray(opts.field_errors) ? opts.field_errors : [];
+    this.fix_suggestion = opts.fix_suggestion ?? null;
     this.kind =
       opts.kind === "user" || opts.kind === "retryable" ? opts.kind : "ops";
   }

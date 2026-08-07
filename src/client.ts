@@ -8,6 +8,7 @@
 
 import {
   ApiError,
+  type FieldError,
   RateLimitError,
   STATUS_TO_ERROR,
   ValidationError,
@@ -43,6 +44,14 @@ interface RequestOptions {
 
 export class GonosClient {
   private readonly apiKey: string;
+  /**
+   * Whether the configured API key is a sandbox (``gn_test_``) key.
+   * Read by resources that offer sandbox-only ergonomics (e.g.
+   * ``checks.create({disposition})``) so they can fail-fast when a live
+   * key is used with a sandbox-only feature. Public getter surface for
+   * consumer code that wants the same signal without inspecting the raw key.
+   */
+  readonly isSandboxKey: boolean;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
@@ -65,6 +74,10 @@ export class GonosClient {
       throw new Error("GonosClient requires an apiKey");
     }
     this.apiKey = opts.apiKey;
+    // #733 (0.1.1): the ``gn_test_`` prefix identifies a sandbox key.
+    // Exposed to resources so ``checks.create({disposition})`` can
+    // fail-fast SDK-side rather than round-trip a 403 from the server.
+    this.isSandboxKey = opts.apiKey.startsWith("gn_test_");
     this.baseUrl = (opts.baseUrl ?? "https://api.gonos.co").replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -136,6 +149,12 @@ export class GonosClient {
       // Passed through raw; ApiError narrows it, defaulting anything it does
       // not recognize to "ops" so an unknown kind can never become displayable.
       kind: (data.kind as string | undefined) ?? null,
+      // #733 (0.1.1): preserve per-field validation errors and the
+      // one-line fix suggestion the API surfaces on 422s. 0.1.0 dropped
+      // both; callers that wanted "which field failed" had to regex
+      // ``detail`` or fall back to the low-level ``client.request``.
+      field_errors: Array.isArray(data.errors) ? (data.errors as FieldError[]) : null,
+      fix_suggestion: (data.fix_suggestion as string | undefined) ?? null,
     };
     if (ErrorCls === RateLimitError) {
       const retryAfter = resp.headers.get("Retry-After");

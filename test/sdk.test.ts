@@ -225,3 +225,128 @@ describe("ApiError.kind", () => {
     expect(new ApiError({ status_code: 400, error: "e", kind: "spicy" }).kind).toBe("ops");
   });
 });
+
+// #733 (0.1.1) — the three shipping blocker fixes + one nit.
+describe("#733 blocker fixes", () => {
+  describe("consent.create sends every API-required field", () => {
+    it("forwards disclosure_version and permissible_purpose (the 0.1.0-dropped fields)", async () => {
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: { id: "cs_1", status: "pending" },
+      }));
+      await client.consent.create({
+        candidate_id: "cand_1",
+        check_id: "chk_1",
+        disclosure_version: "v2.0",
+        permissible_purpose: "employment",
+        disclosure_type: "standalone",
+      });
+      expect(calls[0].body).toEqual({
+        candidate_id: "cand_1",
+        check_id: "chk_1",
+        disclosure_version: "v2.0",
+        permissible_purpose: "employment",
+        disclosure_type: "standalone",
+      });
+    });
+
+    it("forwards optional mobile deep-link + i18n fields when supplied", async () => {
+      const { client, calls } = mockClient(() => ({ status: 201, body: { id: "cs_1" } }));
+      await client.consent.create({
+        candidate_id: "cand_1",
+        check_id: "chk_1",
+        disclosure_version: "v2.0",
+        permissible_purpose: "employment",
+        return_url: "acme://consent-complete/?session_id=x",
+        locale: "es",
+        candidate_state: "CA",
+        metadata: { source: "onboarding" },
+      });
+      expect(calls[0].body).toMatchObject({
+        return_url: "acme://consent-complete/?session_id=x",
+        locale: "es",
+        candidate_state: "CA",
+        metadata: { source: "onboarding" },
+      });
+    });
+
+    it("omits optional fields from the body when not supplied", async () => {
+      const { client, calls } = mockClient(() => ({ status: 201, body: { id: "cs_1" } }));
+      await client.consent.create({
+        candidate_id: "cand_1",
+        check_id: "chk_1",
+        disclosure_version: "v2.0",
+        permissible_purpose: "employment",
+      });
+      const body = calls[0].body as Record<string, unknown>;
+      expect(body).not.toHaveProperty("locale");
+      expect(body).not.toHaveProperty("return_url");
+      expect(body).not.toHaveProperty("metadata");
+    });
+  });
+
+  describe("checks.create — certification_text_hash + disposition", () => {
+    it("forwards certification_text_hash in the body when supplied", async () => {
+      const { client, calls } = mockClient(() => ({ status: 201, body: { id: "chk_1" } }));
+      await client.checks.create({
+        candidate_id: "cand_1",
+        certification_text_hash: "sha256:" + "a".repeat(64),
+      });
+      expect(calls[0].body).toMatchObject({
+        certification_text_hash: "sha256:" + "a".repeat(64),
+      });
+    });
+
+    it("folds disposition into X-Gonos-Test-Disposition when the key is sandbox", async () => {
+      const { client, calls } = mockClient(() => ({ status: 201, body: { id: "chk_1" } }));
+      // mockClient uses ``gn_test_abc`` — a sandbox key, so disposition is accepted.
+      await client.checks.create({ candidate_id: "cand_1", disposition: "clear" });
+      expect(calls[0].headers["X-Gonos-Test-Disposition"]).toBe("clear");
+    });
+
+    it("throws SDK-side when disposition is set on a live key", () => {
+      const client = new GonosClient({
+        apiKey: "gn_live_abc",
+        baseUrl: "https://api.example.com",
+      });
+      expect(() =>
+        client.checks.create({ candidate_id: "cand_1", disposition: "hit" }),
+      ).toThrow(/sandbox-only/);
+    });
+  });
+
+  describe("ApiError preserves field_errors and fix_suggestion from 422 bodies", () => {
+    it("populates both from the response payload", async () => {
+      const { client } = mockClient(() => ({
+        status: 422,
+        body: {
+          error: "validation_error",
+          detail: "check_id: field required",
+          errors: [
+            { field: "check_id", message: "field required", type: "missing" },
+          ],
+          fix_suggestion: "Include check_id in the request body.",
+        },
+      }));
+      await client.candidates.create({ first_name: "J", last_name: "D" }).then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (err: unknown) => {
+          expect(err).toBeInstanceOf(ValidationError);
+          const v = err as ValidationError;
+          expect(v.field_errors).toEqual([
+            { field: "check_id", message: "field required", type: "missing" },
+          ]);
+          expect(v.fix_suggestion).toBe("Include check_id in the request body.");
+        },
+      );
+    });
+
+    it("defaults to empty array and null when the body omits them (older API deploy)", () => {
+      const e = new ApiError({ status_code: 500, error: "server_error" });
+      expect(e.field_errors).toEqual([]);
+      expect(e.fix_suggestion).toBeNull();
+    });
+  });
+});
