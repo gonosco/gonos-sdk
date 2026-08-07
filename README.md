@@ -19,6 +19,48 @@ typed via `api.d.ts`, see below).
 npm install @gonos/sdk
 ```
 
+The package is **ESM-only** (`"type": "module"`) and requires Node ≥ 18.
+There is no CommonJS build — `require("@gonos/sdk")` is not supported. Use
+`import`, or a dynamic `await import("@gonos/sdk")` from a CJS file.
+
+### Deno and edge runtimes
+
+The client makes requests through `globalThis.fetch` and imports nothing
+from `node:*`, so it runs unmodified on Deno, Supabase Edge Functions,
+Cloudflare Workers, and Vercel Edge — no separate build, no hand-ported
+copy:
+
+```typescript
+// Deno / Supabase Edge Functions
+import { GonosClient, verifyWebhookSignature } from "npm:@gonos/sdk";
+
+const client = new GonosClient({ apiKey: Deno.env.get("GONOS_API_KEY")! });
+```
+
+Pass `fetchImpl` if a runtime needs a wrapped or instrumented fetch:
+
+```typescript
+const client = new GonosClient({ apiKey, fetchImpl: myTracedFetch });
+```
+
+Webhook verification works the same everywhere, because it has no Node
+dependency either — the Standard Webhooks library it wraps uses pure-JS
+SHA-256 and base64 and its own constant-time compare:
+
+```typescript
+const result = verifyWebhookSignature({
+  payload: rawBody, // the raw bytes, not parsed JSON
+  headers: req.headers,
+  secret: Deno.env.get("GONOS_WEBHOOK_SECRET")!,
+});
+if (!result.verified) return new Response(null, { status: 401 });
+```
+
+Prefer this over a hand-rolled HMAC check. It enforces **timestamp
+freshness**, which a signature check alone does not: without it, a captured
+request body replays against your endpoint indefinitely with a permanently
+valid signature.
+
 ## Quick start
 
 ```typescript
