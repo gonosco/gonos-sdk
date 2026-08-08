@@ -568,3 +568,59 @@ describe("0.4.1 security fixes", () => {
     });
   });
 });
+
+// 0.5.0 — feedback loop + cleanup.
+describe("0.5.0 changes", () => {
+  it("every SDK error message includes the feedback URL", async () => {
+    const { client } = mockClient(() => ({
+      status: 404,
+      body: { error: "not_found", detail: "check not found" },
+    }));
+    await client.checks.get("chk_missing").then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (err: unknown) => {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).message).toContain(
+          "github.com/gonosco/gonos-sdk/issues/new",
+        );
+      },
+    );
+  });
+
+  it("SDK-side thrown errors (not API errors) also include the feedback URL", () => {
+    const client = new GonosClient({
+      apiKey: "gn_live_abc",
+      baseUrl: "https://api.example.com",
+    });
+    try {
+      client.checks.create({ candidate_id: "cand_1", disposition: "hit" });
+      throw new Error("expected sync throw");
+    } catch (err) {
+      expect((err as Error).message).toContain(
+        "github.com/gonosco/gonos-sdk/issues/new",
+      );
+    }
+  });
+
+  it("STATUS_TO_ERROR maps 400 and 422 to ValidationError via the table (no more inline special-case)", async () => {
+    // Confirms that after removing the inline ``if (status === 400 || 422)``
+    // branch, both statuses still route through the table to ValidationError.
+    for (const status of [400, 422] as const) {
+      const { client } = mockClient(() => ({
+        status,
+        body: { error: "validation_error", detail: "bad thing" },
+      }));
+      await client.candidates.get("cand_1").then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (err: unknown) => {
+          expect(err).toBeInstanceOf(ValidationError);
+          expect((err as ValidationError).status_code).toBe(status);
+        },
+      );
+    }
+  });
+});
