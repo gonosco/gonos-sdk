@@ -22,7 +22,7 @@ export class WebhooksResource extends BaseResource {
   delete(endpointId: string): Promise<void> {
     return this.request<void>({
       method: "DELETE",
-      path: `/webhooks/endpoints/${endpointId}`,
+      path: `/webhooks/endpoints/${encodeURIComponent(endpointId)}`,
     });
   }
 }

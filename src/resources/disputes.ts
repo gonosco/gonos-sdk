@@ -25,7 +25,7 @@ export class DisputesResource extends BaseResource {
   }
 
   get(disputeId: string): Promise<DisputeResponse> {
-    return this.request<DisputeResponse>({ method: "GET", path: `/disputes/${disputeId}` });
+    return this.request<DisputeResponse>({ method: "GET", path: `/disputes/${encodeURIComponent(disputeId)}` });
   }
 
   create(params: DisputeCreateParams): Promise<DisputeResponse> {
@@ -47,7 +47,7 @@ export class DisputesResource extends BaseResource {
   ): Promise<DisputeResponse> {
     return this.request<DisputeResponse>({
       method: "POST",
-      path: `/disputes/${disputeId}/evidence`,
+      path: `/disputes/${encodeURIComponent(disputeId)}/evidence`,
       body: { evidence_type: params.evidence_type, content: params.content },
     });
   }

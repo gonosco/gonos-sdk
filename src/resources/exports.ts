@@ -17,7 +17,7 @@ export class ExportsResource extends BaseResource {
   }
 
   get(exportId: string): Promise<ExportResponse> {
-    return this.request<ExportResponse>({ method: "GET", path: `/exports/${exportId}` });
+    return this.request<ExportResponse>({ method: "GET", path: `/exports/${encodeURIComponent(exportId)}` });
   }
 
   list(params: { page?: number; per_page?: number } = {}): Promise<Paginated<ExportResponse>> {

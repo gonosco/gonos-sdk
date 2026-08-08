@@ -20,7 +20,7 @@ export class AdverseActionsResource extends BaseResource {
   get(actionId: string): Promise<AdverseActionResponse> {
     return this.request<AdverseActionResponse>({
       method: "GET",
-      path: `/adverse-actions/${actionId}`,
+      path: `/adverse-actions/${encodeURIComponent(actionId)}`,
     });
   }
 
@@ -37,7 +37,7 @@ export class AdverseActionsResource extends BaseResource {
   finalize(actionId: string, params: { platform_decision: string }): Promise<AdverseActionResponse> {
     return this.request<AdverseActionResponse>({
       method: "POST",
-      path: `/adverse-actions/${actionId}/finalize`,
+      path: `/adverse-actions/${encodeURIComponent(actionId)}/finalize`,
       body: { platform_decision: params.platform_decision },
     });
   }
