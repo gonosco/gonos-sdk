@@ -88,11 +88,11 @@ export class ChecksResource extends BaseResource {
   }
 
   submit(checkId: string): Promise<CheckResponse> {
-    return this.request<CheckResponse>({ method: "POST", path: `/checks/${checkId}/submit` });
+    return this.request<CheckResponse>({ method: "POST", path: `/checks/${encodeURIComponent(checkId)}/submit` });
   }
 
   get(checkId: string): Promise<CheckResponse> {
-    return this.request<CheckResponse>({ method: "GET", path: `/checks/${checkId}` });
+    return this.request<CheckResponse>({ method: "GET", path: `/checks/${encodeURIComponent(checkId)}` });
   }
 
   list(
@@ -110,6 +110,6 @@ export class ChecksResource extends BaseResource {
   }
 
   cancel(checkId: string): Promise<CheckResponse> {
-    return this.request<CheckResponse>({ method: "POST", path: `/checks/${checkId}/cancel` });
+    return this.request<CheckResponse>({ method: "POST", path: `/checks/${encodeURIComponent(checkId)}/cancel` });
   }
 }

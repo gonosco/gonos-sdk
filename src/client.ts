@@ -42,6 +42,32 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+/**
+ * Parse the ``Retry-After`` header per RFC 7231. Two accepted formats:
+ *
+ * - ``<delta-seconds>`` — an integer. Return it directly.
+ * - ``<HTTP-date>`` — e.g. ``Wed, 21 Oct 2025 07:28:00 GMT``. Return the
+ *   difference from now, clamped to non-negative.
+ *
+ * Returns 60 (a conservative default) when the header is absent OR when
+ * parsing fails. ``parseInt("Wed, 21 Oct...", 10)`` on the HTTP-date path
+ * previously returned ``NaN``, which callers checking
+ * ``if (err.retry_after > 0)`` would coerce to ``false`` — meaning no
+ * back-off, meaning API bans. This helper is the fix.
+ */
+function parseRetryAfter(header: string | null): number {
+  if (!header) return 60;
+  const asSeconds = parseInt(header, 10);
+  if (!isNaN(asSeconds) && String(asSeconds) === header.trim()) {
+    return asSeconds;
+  }
+  const asDate = Date.parse(header);
+  if (!isNaN(asDate)) {
+    return Math.max(0, Math.ceil((asDate - Date.now()) / 1000));
+  }
+  return 60;
+}
+
 export class GonosClient {
   private readonly apiKey: string;
   /**
@@ -108,11 +134,17 @@ export class GonosClient {
     try {
       resp = await this.fetchImpl(url.toString(), {
         method: opts.method ?? "GET",
+        // #NNN (2026-08-08 security review): caller-supplied ``opts.headers``
+        // spread FIRST, SDK-managed headers spread LAST so ours always win.
+        // Reverse order (which shipped through 0.4.0) let a caller override
+        // ``X-API-Key`` — high-severity in the ``client.request()``
+        // escape-hatch pattern where integrators sometimes forward HTTP
+        // request headers from untrusted upstream sources.
         headers: {
+          ...opts.headers,
           "X-API-Key": this.apiKey,
           "Content-Type": "application/json",
           Accept: "application/json",
-          ...opts.headers,
         },
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal,
@@ -157,10 +189,9 @@ export class GonosClient {
       fix_suggestion: (data.fix_suggestion as string | undefined) ?? null,
     };
     if (ErrorCls === RateLimitError) {
-      const retryAfter = resp.headers.get("Retry-After");
       throw new RateLimitError({
         ...errOpts,
-        retry_after: retryAfter ? parseInt(retryAfter, 10) : 60,
+        retry_after: parseRetryAfter(resp.headers.get("Retry-After")),
       });
     }
     throw new ErrorCls(errOpts);

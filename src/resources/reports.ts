@@ -25,7 +25,7 @@ export class ReportsResource extends BaseResource {
   async items(checkId: string): Promise<CheckItemResponse[]> {
     const data = await this.request<{ items?: CheckItemResponse[] } | CheckItemResponse[]>({
       method: "GET",
-      path: `/checks/${checkId}/items`,
+      path: `/checks/${encodeURIComponent(checkId)}/items`,
     });
     if (Array.isArray(data)) return data;
     return data.items ?? [];

@@ -32,7 +32,7 @@ export class CandidatesResource extends BaseResource {
   }
 
   get(candidateId: string): Promise<CandidateResponse> {
-    return this.request<CandidateResponse>({ method: "GET", path: `/candidates/${candidateId}` });
+    return this.request<CandidateResponse>({ method: "GET", path: `/candidates/${encodeURIComponent(candidateId)}` });
   }
 
   list(params: { page?: number; per_page?: number } = {}): Promise<Paginated<CandidateResponse>> {
@@ -49,7 +49,7 @@ export class CandidatesResource extends BaseResource {
   ): Promise<CandidateResponse> {
     return this.request<CandidateResponse>({
       method: "PATCH",
-      path: `/candidates/${candidateId}`,
+      path: `/candidates/${encodeURIComponent(candidateId)}`,
       body: fields,
     });
   }
@@ -79,6 +79,6 @@ export class CandidatesResource extends BaseResource {
   }
 
   delete(candidateId: string): Promise<void> {
-    return this.request<void>({ method: "DELETE", path: `/candidates/${candidateId}` });
+    return this.request<void>({ method: "DELETE", path: `/candidates/${encodeURIComponent(candidateId)}` });
   }
 }

@@ -75,7 +75,7 @@ export class ConsentResource extends BaseResource {
   get(sessionId: string): Promise<ConsentSessionResponse> {
     return this.request<ConsentSessionResponse>({
       method: "GET",
-      path: `/consent-sessions/${sessionId}`,
+      path: `/consent-sessions/${encodeURIComponent(sessionId)}`,
     });
   }
 

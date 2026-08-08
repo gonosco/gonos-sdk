@@ -429,3 +429,142 @@ describe("0.4.0 DX gap fixes", () => {
     });
   });
 });
+
+// 0.4.1 — security + correctness fixes from the 2026-08-08 SDK review.
+describe("0.4.1 security fixes", () => {
+  describe("header precedence — SDK headers cannot be overridden by caller", () => {
+    it("caller cannot override X-API-Key via opts.headers on client.request", async () => {
+      const { client, calls } = mockClient(() => ({ status: 200, body: {} }));
+      await client.request({
+        method: "GET",
+        path: "/api/v1/anything",
+        // Simulates the attack: an integrator forwards HTTP request
+        // headers from an untrusted upstream source into client.request.
+        headers: { "X-API-Key": "gn_live_attacker_key" },
+      });
+      // The client's own key wins; the attacker header is dropped.
+      expect(calls[0].headers["X-API-Key"]).toBe("gn_test_abc");
+      expect(calls[0].headers["X-API-Key"]).not.toBe("gn_live_attacker_key");
+    });
+
+    it("caller cannot override Content-Type or Accept", async () => {
+      const { client, calls } = mockClient(() => ({ status: 200, body: {} }));
+      await client.request({
+        method: "POST",
+        path: "/api/v1/anything",
+        body: { x: 1 },
+        headers: {
+          "Content-Type": "text/xml",
+          Accept: "text/xml",
+        },
+      });
+      expect(calls[0].headers["Content-Type"]).toBe("application/json");
+      expect(calls[0].headers["Accept"]).toBe("application/json");
+    });
+
+    it("caller headers OTHER than the SDK-managed set still pass through", async () => {
+      const { client, calls } = mockClient(() => ({ status: 200, body: {} }));
+      await client.request({
+        method: "GET",
+        path: "/api/v1/anything",
+        headers: { "X-Correlation-Id": "trace-abc" },
+      });
+      expect(calls[0].headers["X-Correlation-Id"]).toBe("trace-abc");
+    });
+  });
+
+  describe("Retry-After parsing (RFC 7231 — both formats)", () => {
+    it("parses delta-seconds integer form", async () => {
+      const { client } = mockClient(() => ({
+        status: 429,
+        body: { error: "rate_limited" },
+        headers: { "Retry-After": "120" },
+      }));
+      await client.checks.list().then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (err: unknown) => {
+          expect(err).toBeInstanceOf(RateLimitError);
+          expect((err as RateLimitError).retry_after).toBe(120);
+        },
+      );
+    });
+
+    it("parses HTTP-date form as seconds-until-that-date (previously returned NaN)", async () => {
+      const inFiveMinutes = new Date(Date.now() + 5 * 60 * 1000).toUTCString();
+      const { client } = mockClient(() => ({
+        status: 429,
+        body: { error: "rate_limited" },
+        headers: { "Retry-After": inFiveMinutes },
+      }));
+      await client.checks.list().then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (err: unknown) => {
+          const rl = err as RateLimitError;
+          // Should be approximately 300 seconds (with a few-second tolerance for
+          // clock drift between mock construction and the parse).
+          expect(rl.retry_after).toBeGreaterThan(295);
+          expect(rl.retry_after).toBeLessThan(305);
+        },
+      );
+    });
+
+    it("returns 60 (conservative default) when Retry-After is absent", async () => {
+      const { client } = mockClient(() => ({ status: 429, body: {} }));
+      await client.checks.list().then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (err: unknown) => {
+          expect((err as RateLimitError).retry_after).toBe(60);
+        },
+      );
+    });
+
+    it("returns 60 when Retry-After is unparseable garbage", async () => {
+      const { client } = mockClient(() => ({
+        status: 429,
+        body: {},
+        headers: { "Retry-After": "not-a-date-or-integer" },
+      }));
+      await client.checks.list().then(
+        () => {
+          throw new Error("expected rejection");
+        },
+        (err: unknown) => {
+          expect((err as RateLimitError).retry_after).toBe(60);
+        },
+      );
+    });
+  });
+
+  describe("URL encoding — path parameters", () => {
+    it("candidates.get encodes IDs containing special characters", async () => {
+      const { client, calls } = mockClient(() => ({ status: 200, body: {} }));
+      // Malicious ID trying to break out of the path segment.
+      await client.candidates.get("cand_1/../../billing/invoices/secret");
+      expect(calls[0].url).toContain(
+        "cand_1%2F..%2F..%2Fbilling%2Finvoices%2Fsecret",
+      );
+      // The literal traversal string must NOT appear in the URL as-is —
+      // if it did, HTTP-server path normalization could route the request
+      // to a different resource.
+      expect(calls[0].url).not.toContain("cand_1/../..");
+    });
+
+    it("checks.submit encodes IDs with special characters", async () => {
+      const { client, calls } = mockClient(() => ({ status: 200, body: {} }));
+      await client.checks.submit("chk 1?a=b");
+      expect(calls[0].url).toContain("chk%201%3Fa%3Db");
+    });
+
+    it("consent.get encodes IDs with special characters", async () => {
+      const { client, calls } = mockClient(() => ({ status: 200, body: {} }));
+      await client.consent.get("cs 1&b=c");
+      expect(calls[0].url).toContain("cs%201%26b%3Dc");
+    });
+  });
+});

@@ -16,7 +16,7 @@ export class BillingResource extends BaseResource {
   get_invoice(invoiceId: string): Promise<InvoiceResponse> {
     return this.request<InvoiceResponse>({
       method: "GET",
-      path: `/billing/invoices/${invoiceId}`,
+      path: `/billing/invoices/${encodeURIComponent(invoiceId)}`,
     });
   }
 
