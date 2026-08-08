@@ -42,6 +42,8 @@ export interface ConsentCreateParams {
   candidate_state?: string;
   /** Arbitrary metadata to attach to the session (max 50 keys, 10 KB serialized). */
   metadata?: Record<string, unknown>;
+  /** Set to make creation idempotent (sent as the Idempotency-Key header). */
+  idempotency_key?: string;
 }
 
 export class ConsentResource extends BaseResource {
@@ -64,6 +66,9 @@ export class ConsentResource extends BaseResource {
       method: "POST",
       path: "/consent-sessions",
       body,
+      headers: params.idempotency_key
+        ? { "Idempotency-Key": params.idempotency_key }
+        : undefined,
     });
   }
 

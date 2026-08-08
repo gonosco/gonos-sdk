@@ -1,12 +1,12 @@
 import { BaseResource } from "./base.js";
 import { NotFoundError } from "../errors.js";
-import type { CheckItem, Report } from "../models.js";
+import type { CheckItemResponse, ReportResponse } from "../api-types.js";
 
 export class ReportsResource extends BaseResource {
   /** Fetch the report for a check. The endpoint is paginated; returns the
    * first (most recent) report, or throws NotFoundError if none exists. */
-  async get(checkId: string): Promise<Report> {
-    const data = await this.request<{ items?: Report[] } & Report>({
+  async get(checkId: string): Promise<ReportResponse> {
+    const data = await this.request<{ items?: ReportResponse[] } & ReportResponse>({
       method: "GET",
       path: "/reports",
       query: { check_id: checkId },
@@ -22,8 +22,8 @@ export class ReportsResource extends BaseResource {
   }
 
   /** List the individual check items (one per data source). */
-  async items(checkId: string): Promise<CheckItem[]> {
-    const data = await this.request<{ items?: CheckItem[] } | CheckItem[]>({
+  async items(checkId: string): Promise<CheckItemResponse[]> {
+    const data = await this.request<{ items?: CheckItemResponse[] } | CheckItemResponse[]>({
       method: "GET",
       path: `/checks/${checkId}/items`,
     });
