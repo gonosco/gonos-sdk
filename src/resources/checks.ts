@@ -32,12 +32,26 @@ export interface CheckCreateParams {
   /** Set to make creation idempotent (sent as the Idempotency-Key header). */
   idempotency_key?: string;
   /**
-   * Sandbox only — forces a fixture outcome instead of running the
-   * real check. One of: "clear" | "hit" | "multi_hit" | "disputed" |
-   * "error" | "timeout". Rejected client-side with ``GonosError`` when
-   * used on a live key (a ``gn_live_*`` API key). On a sandbox key
-   * (``gn_test_*``) this is sent as the ``X-Gonos-Test-Disposition``
-   * header.
+   * @deprecated Set the candidate's ``last_name`` to a ``SANDBOX*`` prefix
+   * instead. This header path forces a lower-level fixture outcome via a
+   * separate vocabulary (``clear/hit/multi_hit/disputed/error/timeout``)
+   * that doesn't match the production output vocabulary
+   * (``clear/consider/review``) — Selky flagged the mismatch as a real
+   * DX problem (#733). The SANDBOX*-name pattern is the industry standard
+   * (Stripe test cards, Plaid ``override_username``, etc.) and produces
+   * the same output vocabulary in sandbox and prod:
+   *
+   *     await client.candidates.create({ first_name: "Test", last_name: "SANDBOXCLEAR" });
+   *     await client.checks.create({ candidate_id, permissible_purpose: "employment" });
+   *     // → check.disposition = "clear" in the webhook, same as prod
+   *
+   * Supported ``SANDBOX*`` last-name suffixes:
+   * ``SANDBOXCLEAR`` | ``SANDBOXCONSIDER`` | ``SANDBOXREVIEW`` |
+   * ``SANDBOXERROR`` | ``SANDBOXTIMEOUT``.
+   *
+   * This param will be removed in the 1.0 release. On a sandbox
+   * (``gn_test_*``) key the header still ships; on a live (``gn_live_*``)
+   * key the SDK still throws ``GonosError`` as before.
    */
   disposition?: "clear" | "hit" | "multi_hit" | "disputed" | "error" | "timeout";
 }

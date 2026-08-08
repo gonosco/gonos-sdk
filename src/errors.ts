@@ -6,9 +6,19 @@
  * from terminal ones (ValidationError, ConflictError).
  */
 
+/**
+ * Where to report SDK issues. Appended to every SDK-thrown error's message
+ * so integrators (and AI agents) see the pointer at friction moments, not
+ * only if they think to read the README months earlier.
+ */
+export const SDK_FEEDBACK_URL =
+  "https://github.com/gonosco/gonos-sdk/issues/new?labels=sdk-integration-feedback";
+
 export class GonosError extends Error {
   constructor(message: string) {
-    super(message);
+    super(
+      `${message}\n\nIf this behavior is unexpected or this message is unclear, please tell us: ${SDK_FEEDBACK_URL}`,
+    );
     this.name = "GonosError";
   }
 }
@@ -130,6 +140,12 @@ export {
 } from "./errors.generated.js";
 
 export const STATUS_TO_ERROR: Record<number, typeof ApiError> = {
+  // Both 400 and 422 map to ValidationError. FastAPI emits 422 for
+  // Pydantic-level parse failures (bad JSON body, missing required
+  // field, wrong type); the app layer raises 400 for domain validation
+  // (business-rule failures). Both are "consumer sent something we
+  // could not accept" — same subclass.
+  400: ValidationError,
   401: AuthenticationError,
   403: ForbiddenError,
   404: NotFoundError,
@@ -137,6 +153,7 @@ export const STATUS_TO_ERROR: Record<number, typeof ApiError> = {
   412: PreconditionFailedError,
   413: PayloadTooLargeError,
   415: UnsupportedMediaTypeError,
+  422: ValidationError,
   423: LockedError,
   429: RateLimitError,
   500: ServerError,

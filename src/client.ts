@@ -11,7 +11,6 @@ import {
   type FieldError,
   RateLimitError,
   STATUS_TO_ERROR,
-  ValidationError,
 } from "./errors.js";
 import { AdverseActionsResource } from "./resources/adverse_actions.js";
 import { AnalyticsResource } from "./resources/analytics.js";
@@ -168,10 +167,7 @@ export class GonosClient {
       return data as T;
     }
 
-    let ErrorCls = STATUS_TO_ERROR[resp.status] ?? ApiError;
-    if (resp.status === 400 || resp.status === 422) {
-      ErrorCls = ValidationError;
-    }
+    const ErrorCls = STATUS_TO_ERROR[resp.status] ?? ApiError;
     const errOpts = {
       status_code: resp.status,
       error: (data.error as string | undefined) ?? "unknown",

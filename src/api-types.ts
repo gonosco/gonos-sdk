@@ -106,6 +106,16 @@ export type ExportResponse = Schemas["ExportJobResponse"];
 // Reports / check items
 export type CheckItemResponse = Schemas["CheckItemResponse"];
 
+/**
+ * Disposition assigned to a completed background check report. Emitted on
+ * webhook payloads (``check.completed``, ``report.ready``) and returned
+ * from ``client.checks.get()``. Same vocabulary in sandbox and production
+ * (per Selky #733 alignment — sandbox now goes through the same
+ * adjudicator as production, triggered via ``SANDBOX*`` last-name
+ * prefixes rather than a separate header vocabulary).
+ */
+export type CheckDisposition = Schemas["ReportDisposition"];
+
 // Billing
 export type InvoiceResponse = Schemas["InvoiceResponse"];
 

@@ -151,6 +151,47 @@ npm run generate   # writes src/api.ts (gitignored)
 Every non-2xx response raises a typed error. See ``src/errors.ts`` for the
 full hierarchy — mirrors the Python SDK.
 
+### Two ways to route errors, both supported
+
+Every ``ApiError`` carries an ``kind`` field with three possible values
+(``"user"``, ``"retryable"``, ``"ops"``) — the API's audience
+classification. AND it's an instance of a status-specific subclass
+(``RateLimitError``, ``ForbiddenError``, etc.).
+
+Both routing surfaces work; they're for different consumers:
+
+- **Use ``instanceof`` when you need status-specific fields** — e.g.
+  ``err instanceof RateLimitError`` gives you typed access to
+  ``err.retry_after``. Idiomatic TypeScript, best when your handler
+  cares about the specific status.
+
+- **Use ``err.kind`` when you're building a generic three-way
+  classifier** — display / retry / alert. Cleaner than maintaining
+  your own status-code-to-audience mapping, and it survives Gonos
+  adding new status codes we haven't yet subclassed
+  (falls back to ``"ops"`` = alert the team). This is what
+  ``err.kind`` was designed for.
+
+Both patterns in one place:
+
+```typescript
+try { await client.checks.create(...); }
+catch (err) {
+  if (err instanceof RateLimitError) {
+    await sleep(err.retry_after * 1000);
+    return retry();
+  }
+  if (err instanceof ApiError) {
+    if (err.kind === "user") showToUser(err.detail);
+    else if (err.kind === "retryable") await retry();
+    else alertOncall(err.correlation_id);
+  }
+  throw err;
+}
+```
+
+### Status → class table
+
 | Status | Class | Notes |
 |---|---|---|
 | 401 | AuthenticationError | Invalid / missing API key |
