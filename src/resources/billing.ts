@@ -1,19 +1,20 @@
 import { BaseResource } from "./base.js";
-import type { Invoice, Paginated } from "../models.js";
+import type { InvoiceResponse } from "../api-types.js";
+import type { Paginated } from "../models.js";
 
 export class BillingResource extends BaseResource {
   list_invoices(
     params: { page?: number; per_page?: number } = {},
-  ): Promise<Paginated<Invoice>> {
-    return this.request<Paginated<Invoice>>({
+  ): Promise<Paginated<InvoiceResponse>> {
+    return this.request<Paginated<InvoiceResponse>>({
       method: "GET",
       path: "/billing/invoices",
       query: { page: params.page ?? 1, per_page: params.per_page ?? 25 },
     });
   }
 
-  get_invoice(invoiceId: string): Promise<Invoice> {
-    return this.request<Invoice>({
+  get_invoice(invoiceId: string): Promise<InvoiceResponse> {
+    return this.request<InvoiceResponse>({
       method: "GET",
       path: `/billing/invoices/${invoiceId}`,
     });

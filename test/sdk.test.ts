@@ -350,3 +350,82 @@ describe("#733 blocker fixes", () => {
     });
   });
 });
+
+// Selky's follow-up DX feedback after the 0.2.0 integration.
+describe("0.4.0 DX gap fixes", () => {
+  describe("WebhookEventType export enables exhaustive switch", () => {
+    it("is a compile-time union of every server-emitted event", async () => {
+      // Runtime assertion: import the type via a type-position expression and
+      // verify the SDK exports it. If someone drops the export, this test
+      // fails at compile time (before the runtime check even runs).
+      const mod = await import("../src/index.js");
+      // The union is a type — nothing to check at runtime. But the module's
+      // ambient type declaration exports it, which tsc validates during
+      // ``npm run build``. If ``WebhookEventType`` were removed from the
+      // barrel, the compilation of this test file would fail.
+      type _AssertExport = import("../src/index.js").WebhookEventType;
+      const sentinel: _AssertExport = "consent_session.completed";
+      expect(sentinel).toBe("consent_session.completed");
+      // Sanity: module namespace exists.
+      expect(typeof mod).toBe("object");
+    });
+  });
+
+  describe("Idempotency-Key coverage on the endpoints Selky flagged", () => {
+    it("candidates.upsert folds idempotency_key into the header", async () => {
+      const { client, calls } = mockClient(() => ({
+        status: 200,
+        body: { id: "cand_1", first_name: "J", last_name: "D" },
+      }));
+      await client.candidates.upsert({
+        external_id: "ext-1",
+        first_name: "Jane",
+        idempotency_key: "cli-key-1",
+      });
+      expect(calls[0].headers["Idempotency-Key"]).toBe("cli-key-1");
+      // Body should NOT carry idempotency_key — it's a header, not a field.
+      expect(calls[0].body).not.toHaveProperty("idempotency_key");
+    });
+
+    it("candidates.create folds idempotency_key into the header", async () => {
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: { id: "cand_2", first_name: "J", last_name: "D" },
+      }));
+      await client.candidates.create({
+        first_name: "Jane",
+        last_name: "Doe",
+        idempotency_key: "cli-key-2",
+      });
+      expect(calls[0].headers["Idempotency-Key"]).toBe("cli-key-2");
+      expect(calls[0].body).not.toHaveProperty("idempotency_key");
+    });
+
+    it("consent.create folds idempotency_key into the header", async () => {
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: { id: "cs_1", status: "pending" },
+      }));
+      await client.consent.create({
+        candidate_id: "cand_1",
+        check_id: "chk_1",
+        disclosure_version: "v2.0",
+        permissible_purpose: "employment",
+        idempotency_key: "cli-key-3",
+      });
+      expect(calls[0].headers["Idempotency-Key"]).toBe("cli-key-3");
+      expect(calls[0].body).not.toHaveProperty("idempotency_key");
+    });
+
+    it("omits the header when idempotency_key is not supplied", async () => {
+      const { client, calls } = mockClient(() => ({ status: 201, body: { id: "cs_1" } }));
+      await client.consent.create({
+        candidate_id: "cand_1",
+        check_id: "chk_1",
+        disclosure_version: "v2.0",
+        permissible_purpose: "employment",
+      });
+      expect(calls[0].headers["Idempotency-Key"]).toBeUndefined();
+    });
+  });
+});

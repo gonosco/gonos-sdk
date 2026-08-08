@@ -61,9 +61,53 @@ export type WebhookEndpointCreateBody = Schemas["WebhookEndpointCreate"];
 export type WebhookEndpointResponse = Schemas["WebhookEndpointResponse"];
 export type WebhookEndpointCreateResponse = Schemas["WebhookEndpointCreateResponse"];
 
+/**
+ * Every ``event_type`` value the API can emit on a webhook. Import into a
+ * ``switch (event.event_type)`` and TypeScript enforces exhaustiveness —
+ * a new event type added server-side becomes a compile error at every
+ * consumer, instead of silently falling through to ``default``.
+ *
+ *     import type { WebhookEventType } from "@gonos/sdk";
+ *
+ *     function handle(event: { event_type: WebhookEventType }) {
+ *       switch (event.event_type) {
+ *         case "check.completed": ...
+ *         case "consent_session.completed": ...
+ *         // ...every other case...
+ *         default: {
+ *           const _exhaustive: never = event.event_type;
+ *           throw new Error(`unhandled event: ${_exhaustive}`);
+ *         }
+ *       }
+ *     }
+ */
+export type WebhookEventType = Schemas["WebhookEventType"];
+
+// Typed payload shapes for the subset of events the API emits with a
+// specific schema. Events not listed here carry a payload of the generic
+// ``WebhookPayloadCatalog`` shape — inspect ``event_type`` and cast if
+// you need typed access to fields specific to a payload we haven't
+// carved out yet.
+export type CheckCompletedPayload = Schemas["CheckCompletedPayload"];
+export type CheckPartialPayload = Schemas["CheckPartialPayload"];
+export type ConsentSignedPayload = Schemas["ConsentSignedPayload"];
+export type ReportReadyPayload = Schemas["ReportReadyPayload"];
+export type AdverseActionCreatedPayload = Schemas["AdverseActionCreatedPayload"];
+export type AdverseActionPreNoticeSentPayload = Schemas["AdverseActionPreNoticeSentPayload"];
+export type AdverseActionFinalNoticeSentPayload = Schemas["AdverseActionFinalNoticeSentPayload"];
+export type DisputeSubmittedPayload = Schemas["DisputeSubmittedPayload"];
+export type DisputeResolvedPayload = Schemas["DisputeResolvedPayload"];
+export type WebhookPayloadCatalog = Schemas["WebhookPayloadCatalog"];
+
 // Exports
 export type ExportCreateBody = Schemas["ExportJobCreate"];
 export type ExportResponse = Schemas["ExportJobResponse"];
+
+// Reports / check items
+export type CheckItemResponse = Schemas["CheckItemResponse"];
+
+// Billing
+export type InvoiceResponse = Schemas["InvoiceResponse"];
 
 // Common error envelope — every 4xx/5xx returns this shape.
 export type ErrorEnvelope = Schemas["ErrorResponse"];

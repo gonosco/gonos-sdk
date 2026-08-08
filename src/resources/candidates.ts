@@ -19,8 +19,16 @@ export interface CandidateCreateParams {
 }
 
 export class CandidatesResource extends BaseResource {
-  create(params: CandidateCreateParams): Promise<CandidateResponse> {
-    return this.request<CandidateResponse>({ method: "POST", path: "/candidates", body: params });
+  create(
+    params: CandidateCreateParams & { idempotency_key?: string },
+  ): Promise<CandidateResponse> {
+    const { idempotency_key, ...body } = params;
+    return this.request<CandidateResponse>({
+      method: "POST",
+      path: "/candidates",
+      body,
+      headers: idempotency_key ? { "Idempotency-Key": idempotency_key } : undefined,
+    });
   }
 
   get(candidateId: string): Promise<CandidateResponse> {
@@ -57,13 +65,16 @@ export class CandidatesResource extends BaseResource {
    * The URL identifies the row; any ``external_id`` on the body is ignored.
    */
   upsert(
-    params: { external_id: string } & Partial<Omit<CandidateCreateParams, "external_id">>,
+    params: { external_id: string; idempotency_key?: string } & Partial<
+      Omit<CandidateCreateParams, "external_id">
+    >,
   ): Promise<CandidateResponse> {
-    const { external_id, ...body } = params;
+    const { external_id, idempotency_key, ...body } = params;
     return this.request<CandidateResponse>({
       method: "PUT",
       path: `/candidates/by-external-id/${encodeURIComponent(external_id)}`,
       body,
+      headers: idempotency_key ? { "Idempotency-Key": idempotency_key } : undefined,
     });
   }
 

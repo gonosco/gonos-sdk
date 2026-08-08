@@ -1,5 +1,6 @@
 import { BaseResource } from "./base.js";
-import type { Dispute, Paginated } from "../models.js";
+import type { DisputeResponse } from "../api-types.js";
+import type { Paginated } from "../models.js";
 
 export interface DisputeCreateParams {
   check_id: string;
@@ -11,8 +12,8 @@ export interface DisputeCreateParams {
 export class DisputesResource extends BaseResource {
   list(
     params: { page?: number; per_page?: number; status?: string } = {},
-  ): Promise<Paginated<Dispute>> {
-    return this.request<Paginated<Dispute>>({
+  ): Promise<Paginated<DisputeResponse>> {
+    return this.request<Paginated<DisputeResponse>>({
       method: "GET",
       path: "/disputes",
       query: {
@@ -23,12 +24,12 @@ export class DisputesResource extends BaseResource {
     });
   }
 
-  get(disputeId: string): Promise<Dispute> {
-    return this.request<Dispute>({ method: "GET", path: `/disputes/${disputeId}` });
+  get(disputeId: string): Promise<DisputeResponse> {
+    return this.request<DisputeResponse>({ method: "GET", path: `/disputes/${disputeId}` });
   }
 
-  create(params: DisputeCreateParams): Promise<Dispute> {
-    return this.request<Dispute>({
+  create(params: DisputeCreateParams): Promise<DisputeResponse> {
+    return this.request<DisputeResponse>({
       method: "POST",
       path: "/disputes",
       body: {
@@ -43,8 +44,8 @@ export class DisputesResource extends BaseResource {
   add_evidence(
     disputeId: string,
     params: { evidence_type: string; content: string },
-  ): Promise<Dispute> {
-    return this.request<Dispute>({
+  ): Promise<DisputeResponse> {
+    return this.request<DisputeResponse>({
       method: "POST",
       path: `/disputes/${disputeId}/evidence`,
       body: { evidence_type: params.evidence_type, content: params.content },

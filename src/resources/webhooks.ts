@@ -1,17 +1,17 @@
 import { BaseResource } from "./base.js";
-import type { WebhookEndpoint } from "../models.js";
+import type { WebhookEndpointResponse } from "../api-types.js";
 
 export class WebhooksResource extends BaseResource {
-  create(params: { url: string; events?: string[] }): Promise<WebhookEndpoint> {
-    return this.request<WebhookEndpoint>({
+  create(params: { url: string; events?: string[] }): Promise<WebhookEndpointResponse> {
+    return this.request<WebhookEndpointResponse>({
       method: "POST",
       path: "/webhooks/endpoints",
       body: { url: params.url, events: params.events ?? null },
     });
   }
 
-  async list(): Promise<WebhookEndpoint[]> {
-    const data = await this.request<{ items?: WebhookEndpoint[] } | WebhookEndpoint[]>({
+  async list(): Promise<WebhookEndpointResponse[]> {
+    const data = await this.request<{ items?: WebhookEndpointResponse[] } | WebhookEndpointResponse[]>({
       method: "GET",
       path: "/webhooks/endpoints",
     });
