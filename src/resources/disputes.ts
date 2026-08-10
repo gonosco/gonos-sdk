@@ -1,13 +1,21 @@
 import { BaseResource } from "./base.js";
-import type { DisputeResponse } from "../api-types.js";
+import type { DisputeCreateBody, DisputeResponse } from "../api-types.js";
 import type { Paginated } from "../models.js";
 
-export interface DisputeCreateParams {
-  check_id: string;
-  report_id: string;
-  disputed_items: string[];
-  explanation?: string;
-}
+/**
+ * Params for ``client.disputes.create()``.
+ *
+ * @deprecated Prefer ``DisputeCreateBody`` (re-exported from ``@gonos/sdk``).
+ * The prior hand-written shape shipped the wrong field names — it sent
+ * ``disputed_items`` and ``explanation`` where the spec expects
+ * ``disputed_item_ids`` and ``reason`` + ``reason_detail``. Every call
+ * ended in a 422; the SDK effectively made this endpoint unreachable.
+ * The type alias below now resolves to the spec body so existing imports
+ * still typecheck but must supply the correct field names. Kept as an
+ * alias only for source compat with import statements; the shape has
+ * intentionally changed. See #654 / #754 item 3.
+ */
+export type DisputeCreateParams = DisputeCreateBody;
 
 export class DisputesResource extends BaseResource {
   list(
@@ -28,16 +36,11 @@ export class DisputesResource extends BaseResource {
     return this.request<DisputeResponse>({ method: "GET", path: `/disputes/${encodeURIComponent(disputeId)}` });
   }
 
-  create(params: DisputeCreateParams): Promise<DisputeResponse> {
+  create(params: DisputeCreateBody): Promise<DisputeResponse> {
     return this.request<DisputeResponse>({
       method: "POST",
       path: "/disputes",
-      body: {
-        check_id: params.check_id,
-        report_id: params.report_id,
-        disputed_items: params.disputed_items,
-        explanation: params.explanation ?? null,
-      },
+      body: params,
     });
   }
 

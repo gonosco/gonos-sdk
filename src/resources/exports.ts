@@ -1,18 +1,25 @@
 import { BaseResource } from "./base.js";
-import type { ExportResponse } from "../api-types.js";
+import type { ExportCreateBody, ExportResponse } from "../api-types.js";
 import type { Paginated } from "../models.js";
 
-export interface ExportCreateParams {
-  export_type: string;
-  filters?: Record<string, unknown>;
-}
+/**
+ * Params for ``client.exports.create()``.
+ *
+ * @deprecated Prefer ``ExportCreateBody`` (re-exported from ``@gonos/sdk``).
+ * The prior hand-written shape accepted a ``filters`` field that the
+ * server has never defined — it was silently ignored, so callers
+ * expecting scoped exports actually got full exports and no signal.
+ * The spec body accepts ``export_type`` + ``format``. Kept as an alias
+ * for source compat; the shape has intentionally changed. See #654.
+ */
+export type ExportCreateParams = ExportCreateBody;
 
 export class ExportsResource extends BaseResource {
-  create(params: ExportCreateParams): Promise<ExportResponse> {
+  create(params: ExportCreateBody): Promise<ExportResponse> {
     return this.request<ExportResponse>({
       method: "POST",
       path: "/exports",
-      body: { export_type: params.export_type, filters: params.filters ?? null },
+      body: params,
     });
   }
 

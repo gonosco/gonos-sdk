@@ -31,6 +31,32 @@ export class GonosError extends Error {
  * - `retryable` — transient. Retry with backoff.
  * - `ops` — your team must act (credentials, scopes, plan limits, bugs).
  *   Alert on it; never show `detail` to an end user.
+ *
+ * ## Why this exists alongside the subclass hierarchy
+ *
+ * The two axes answer different questions and do not derive from each
+ * other:
+ *
+ * - **Subclass** (`ForbiddenError`, `ConflictError`, ...) reflects the
+ *   HTTP status. Use it for retry policy (`instanceof RateLimitError` →
+ *   back off, `instanceof BadGatewayError` → retry, `instanceof
+ *   ValidationError` → don't) and for control flow.
+ * - **`kind`** reflects the audience the error is aimed at. The API's
+ *   `kind` classifier looks at the underlying condition, not the status
+ *   code, so the same subclass can carry different kinds:
+ *
+ *   | Subclass          | Example `kind = "user"`         | Example `kind = "ops"`             |
+ *   |-------------------|----------------------------------|-------------------------------------|
+ *   | `ForbiddenError`  | wrong scope for this route       | plan limit reached / feature off    |
+ *   | `ConflictError`   | duplicate `external_id`          | idempotency-key replay collision    |
+ *   | `ValidationError` | end user typed a bad SSN         | integrator sent an unknown field    |
+ *
+ *   Deriving one from the other would leak "safe to show" decisions
+ *   into status-code checks and vice versa. Keep them separate.
+ *
+ * If you only need one dimension, prefer `instanceof` for retry
+ * decisions and `kind` for display decisions. (Selky flagged the two
+ * as redundant in #754 — the mapping above is the answer.)
  */
 export type ErrorKind = "user" | "retryable" | "ops";
 

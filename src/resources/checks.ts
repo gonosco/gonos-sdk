@@ -2,70 +2,75 @@
 // `BaseResource.request`, not written into each path here.
 import { BaseResource } from "./base.js";
 import { GonosError } from "../errors.js";
-import type { CheckResponse } from "../api-types.js";
+import type { CheckCreateBody, CheckResponse } from "../api-types.js";
 import type { Paginated } from "../models.js";
 
 /**
- * #733 (0.1.1):
+ * Params for ``client.checks.create()`` — spec body + SDK-side ergonomics.
  *
- * - ``certification_text_hash`` added — required by orgs that have
- *   ``enforce_canonical_certification_hash`` on. 0.1.0 dropped it
- *   silently, guaranteeing a 422 on those orgs.
- * - ``disposition`` added — sandbox-only ergonomic that folds into
- *   the ``X-Gonos-Test-Disposition`` header. Fails fast client-side
- *   when set on a live key, rather than round-tripping a 403.
+ * The three fields the spec marks as required (``package``,
+ * ``permissible_purpose``, ``purpose_certification``) are made optional
+ * here because the SDK applies opinionated defaults: ``"standard"`` /
+ * ``"employment"`` / ``true``. Every other field flows through as-is,
+ * including ones the spec added after this file was hand-written
+ * (``salary_amount``, ``salary_currency``, ``insurance_subtype``) — those
+ * were previously silently dropped.
+ *
+ * SDK-only knobs (never sent as body fields):
+ *
+ * - ``idempotency_key`` → ``Idempotency-Key`` header.
+ * - ``disposition`` → sandbox-only ``X-Gonos-Test-Disposition`` header;
+ *   throws ``GonosError`` synchronously on a live (``gn_live_*``) key
+ *   so the caller sees the failure at the call site rather than as a
+ *   rejected promise.
  */
-export interface CheckCreateParams {
-  candidate_id: string;
-  /** Package slug. Defaults to "standard". */
-  package?: string;
-  /** FCRA permissible purpose. Defaults to "employment". */
-  permissible_purpose?: string;
-  purpose_certification?: boolean;
-  /**
-   * SHA-256 hash of the canonical §1681b(f) end-user certification text
-   * fetched from ``GET /api/v1/certifications/{purpose}``. Required by
-   * orgs that have ``enforce_canonical_certification_hash=True``
-   * (which is expected for production).
-   */
-  certification_text_hash?: string;
-  /** Set to make creation idempotent (sent as the Idempotency-Key header). */
-  idempotency_key?: string;
-  /**
-   * @deprecated Set the candidate's ``last_name`` to a ``SANDBOX*`` prefix
-   * instead. This header path forces a lower-level fixture outcome via a
-   * separate vocabulary (``clear/hit/multi_hit/disputed/error/timeout``)
-   * that doesn't match the production output vocabulary
-   * (``clear/consider/review``) — Selky flagged the mismatch as a real
-   * DX problem (#733). The SANDBOX*-name pattern is the industry standard
-   * (Stripe test cards, Plaid ``override_username``, etc.) and produces
-   * the same output vocabulary in sandbox and prod:
-   *
-   *     await client.candidates.create({ first_name: "Test", last_name: "SANDBOXCLEAR" });
-   *     await client.checks.create({ candidate_id, permissible_purpose: "employment" });
-   *     // → check.disposition = "clear" in the webhook, same as prod
-   *
-   * Supported ``SANDBOX*`` last-name suffixes:
-   * ``SANDBOXCLEAR`` | ``SANDBOXCONSIDER`` | ``SANDBOXREVIEW`` |
-   * ``SANDBOXERROR`` | ``SANDBOXTIMEOUT``.
-   *
-   * This param will be removed in the 1.0 release. On a sandbox
-   * (``gn_test_*``) key the header still ships; on a live (``gn_live_*``)
-   * key the SDK still throws ``GonosError`` as before.
-   */
-  disposition?: "clear" | "hit" | "multi_hit" | "disputed" | "error" | "timeout";
-}
+export type CheckCreateParams = Omit<
+  CheckCreateBody,
+  "package" | "permissible_purpose" | "purpose_certification"
+> &
+  Partial<
+    Pick<CheckCreateBody, "package" | "permissible_purpose" | "purpose_certification">
+  > & {
+    /** Set to make creation idempotent (sent as the ``Idempotency-Key`` header). */
+    idempotency_key?: string;
+    /**
+     * @deprecated Set the candidate's ``last_name`` to a ``SANDBOX*`` prefix
+     * instead. This header path forces a lower-level fixture outcome via a
+     * separate vocabulary (``clear/hit/multi_hit/disputed/error/timeout``)
+     * that doesn't match the production output vocabulary
+     * (``clear/consider/review``) — Selky flagged the mismatch as a real
+     * DX problem (#733). The SANDBOX*-name pattern is the industry standard
+     * (Stripe test cards, Plaid ``override_username``, etc.) and produces
+     * the same output vocabulary in sandbox and prod:
+     *
+     *     await client.candidates.create({ first_name: "Test", last_name: "SANDBOXCLEAR" });
+     *     await client.checks.create({ candidate_id, permissible_purpose: "employment" });
+     *     // → check.disposition = "clear" in the webhook, same as prod
+     *
+     * Supported ``SANDBOX*`` last-name suffixes:
+     * ``SANDBOXCLEAR`` | ``SANDBOXCONSIDER`` | ``SANDBOXREVIEW`` |
+     * ``SANDBOXERROR`` | ``SANDBOXTIMEOUT``.
+     *
+     * This param will be removed in the 1.0 release. On a sandbox
+     * (``gn_test_*``) key the header still ships; on a live (``gn_live_*``)
+     * key the SDK still throws ``GonosError`` as before.
+     */
+    disposition?: "clear" | "hit" | "multi_hit" | "disputed" | "error" | "timeout";
+  };
 
 export class ChecksResource extends BaseResource {
   create(params: CheckCreateParams): Promise<CheckResponse> {
     const {
-      candidate_id,
+      idempotency_key,
+      disposition,
+      // Extract defaulted fields with destructuring defaults so that
+      // an explicit ``undefined`` from the caller (a common pattern
+      // when building kwargs conditionally) still yields the SDK
+      // default rather than a spread-over ``undefined`` in the body.
       package: pkg = "standard",
       permissible_purpose = "employment",
       purpose_certification = true,
-      certification_text_hash,
-      idempotency_key,
-      disposition,
+      ...rest
     } = params;
 
     if (disposition !== undefined && !this.client.isSandboxKey) {
@@ -79,15 +84,17 @@ export class ChecksResource extends BaseResource {
       );
     }
 
-    const body: Record<string, unknown> = {
-      candidate_id,
+    // Forward every spec field the caller supplied so ones added after
+    // the hand-written type froze (``salary_amount``, ``insurance_subtype``,
+    // etc.) reach the server instead of being silently dropped by a
+    // whitelist. The three SDK-defaulted fields come from destructuring
+    // above so undefined-safety is preserved.
+    const body = {
+      ...rest,
       package: pkg,
       permissible_purpose,
       purpose_certification,
-    };
-    if (certification_text_hash !== undefined) {
-      body.certification_text_hash = certification_text_hash;
-    }
+    } as CheckCreateBody;
 
     const headers: Record<string, string> = {};
     if (idempotency_key) headers["Idempotency-Key"] = idempotency_key;
