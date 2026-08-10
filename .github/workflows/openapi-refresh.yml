@@ -45,6 +45,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Prevents "Duplicate header: Authorization" when
+          # peter-evans/create-pull-request later tries to push. Checkout
+          # otherwise persists a credential helper that stacks with the
+          # action's own auth header, and git rejects the request with 400.
+          # Discovered when the very first repository_dispatch run
+          # (gonosco/gonos#824) reached the PR-creation step. Same failure
+          # was hitting the daily cron silently — this workflow had not
+          # actually opened a drift PR in at least a day.
+          persist-credentials: false
 
       # Only for repository_dispatch triggers: wait until the API's
       # deployed commit matches the SHA the monorepo just merged.
