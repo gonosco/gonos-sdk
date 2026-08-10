@@ -19,12 +19,22 @@ name: Refresh openapi.json from the live API
 # Manually triggerable via ``workflow_dispatch`` — run from Actions UI
 # when a same-day refresh is needed (e.g. after a coordinated API +
 # SDK release).
+#
+# Also triggered on demand by the monorepo via ``repository_dispatch``
+# (event type: ``openapi-changed``, filed as gonosco/gonos#771).
+# ``client_payload.commit`` carries the monorepo SHA that just merged
+# to main. We poll ``/api/v1/version`` (added in gonos#819) until the
+# deployed API reports that SHA, then run the regen, so we don't race
+# a slow Render deploy. If the API doesn't catch up in the timeout,
+# we bail — the daily cron will pick it up regardless.
 
 on:
   schedule:
     # Daily at 07:00 UTC — quiet hour for our target markets.
     - cron: "0 7 * * *"
   workflow_dispatch:
+  repository_dispatch:
+    types: [openapi-changed]
 
 permissions:
   contents: write
@@ -35,6 +45,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Only for repository_dispatch triggers: wait until the API's
+      # deployed commit matches the SHA the monorepo just merged.
+      # Render's deploy latency after a push is ~1-5 min. If it doesn't
+      # catch up in ~10 min, bail — the daily cron will find the drift
+      # eventually, and the failure surfaces a stuck deploy in monitoring.
+      - name: Wait for API deploy to catch up (dispatch trigger only)
+        if: github.event_name == 'repository_dispatch'
+        env:
+          EXPECTED_SHA: ${{ github.event.client_payload.commit }}
+        run: |
+          if [ -z "$EXPECTED_SHA" ]; then
+            echo "::error::client_payload.commit missing — cannot verify API is on the expected commit"
+            exit 1
+          fi
+          echo "Waiting for https://api.gonos.co/api/v1/version to report commit=$EXPECTED_SHA"
+          for attempt in $(seq 1 60); do
+            deployed=$(curl -fsSL --max-time 10 https://api.gonos.co/api/v1/version | jq -r '.commit // "unknown"' || echo "fetch-failed")
+            if [ "$deployed" = "$EXPECTED_SHA" ]; then
+              echo "API is on $deployed (matches monorepo commit) after ${attempt}0s"
+              exit 0
+            fi
+            echo "  attempt $attempt/60: API reports $deployed (want $EXPECTED_SHA), sleeping 10s"
+            sleep 10
+          done
+          echo "::error::API did not report expected commit within 10 min — Render deploy may be stuck. Daily cron will pick up any real drift; failing this dispatch run so the stuck deploy surfaces."
+          exit 1
 
       - name: Fetch current openapi.json from the API
         run: |
@@ -73,9 +110,11 @@ jobs:
           title: "chore: refresh openapi.json from live API"
           commit-message: "chore: refresh openapi.json from live API"
           body: |
-            The scheduled openapi-refresh workflow detected drift between
+            The openapi-refresh workflow detected drift between
             the committed ``openapi.json`` and what ``https://api.gonos.co/openapi.json``
             currently returns.
+
+            **Trigger:** `${{ github.event_name }}`${{ github.event_name == 'repository_dispatch' && format(' — monorepo commit [`{0}`](https://github.com/gonosco/gonos/commit/{0}) (source run: {1})', github.event.client_payload.commit, github.event.client_payload.source_run_url) || '' }}
 
             The generated ``src/api.ts`` has been updated. Build and tests
             passed against the refreshed spec.
