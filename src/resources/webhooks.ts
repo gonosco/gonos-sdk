@@ -1,12 +1,15 @@
 import { BaseResource } from "./base.js";
-import type { WebhookEndpointResponse } from "../api-types.js";
+import type {
+  WebhookEndpointCreateBody,
+  WebhookEndpointResponse,
+} from "../api-types.js";
 
 export class WebhooksResource extends BaseResource {
-  create(params: { url: string; events?: string[] }): Promise<WebhookEndpointResponse> {
+  create(params: WebhookEndpointCreateBody): Promise<WebhookEndpointResponse> {
     return this.request<WebhookEndpointResponse>({
       method: "POST",
       path: "/webhooks/endpoints",
-      body: { url: params.url, events: params.events ?? null },
+      body: params,
     });
   }
 

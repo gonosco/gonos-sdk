@@ -1,15 +1,23 @@
 import { BaseResource } from "./base.js";
-import type { AdverseActionResponse } from "../api-types.js";
+import type {
+  AdverseActionCreateBody,
+  AdverseActionResponse,
+} from "../api-types.js";
 import type { Paginated } from "../models.js";
 
-export interface AdverseActionCreateParams {
-  check_id: string;
-  report_id: string;
-  adverse_reasons: string[];
-}
+/**
+ * Params for ``client.adverse_actions.create()``.
+ *
+ * @deprecated Prefer ``AdverseActionCreateBody`` (re-exported from
+ * ``@gonos/sdk``). The generated spec type covers ``credit_score_disclosure``
+ * and ``waiting_period_days`` — both silently dropped by this hand-written
+ * interface. Kept as a type alias so existing imports resolve. Removal is
+ * a semver-major bump (#654).
+ */
+export type AdverseActionCreateParams = AdverseActionCreateBody;
 
 export class AdverseActionsResource extends BaseResource {
-  create(params: AdverseActionCreateParams): Promise<AdverseActionResponse> {
+  create(params: AdverseActionCreateBody): Promise<AdverseActionResponse> {
     return this.request<AdverseActionResponse>({
       method: "POST",
       path: "/adverse-actions",

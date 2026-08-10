@@ -1,26 +1,30 @@
 // Paths below are host-relative — `/api/v1` is applied by
 // `BaseResource.request`, not written into each path here.
 import { BaseResource } from "./base.js";
-import type { CandidateResponse } from "../api-types.js";
+import type {
+  CandidateCreateBody,
+  CandidateResponse,
+  CandidateUpdateBody,
+} from "../api-types.js";
 import type { Paginated } from "../models.js";
 
-export interface CandidateCreateParams {
-  first_name: string;
-  last_name: string;
-  email?: string;
-  phone?: string;
-  date_of_birth?: string;
-  ssn_last_four?: string;
-  external_id?: string;
-  address_line1?: string;
-  address_city?: string;
-  address_state?: string;
-  address_zip?: string;
-}
+/**
+ * Params for ``client.candidates.create()``.
+ *
+ * @deprecated Prefer ``CandidateCreateBody`` (re-exported from ``@gonos/sdk``)
+ * — the generated spec type covers every field the server accepts. This
+ * hand-written interface pinned an 11-field subset and silently dropped
+ * ``middle_name``, ``name_prefix``, ``name_suffix``, ``alternate_email``,
+ * ``address_line2``, ``address_country``, ``preferred_language``,
+ * ``preferred_notification_channel``, and ``accommodation_requested``.
+ * Kept as a type alias for source compat; new call sites should use the
+ * generated body type directly. Removal is a semver-major bump (#654).
+ */
+export type CandidateCreateParams = CandidateCreateBody;
 
 export class CandidatesResource extends BaseResource {
   create(
-    params: CandidateCreateParams & { idempotency_key?: string },
+    params: CandidateCreateBody & { idempotency_key?: string },
   ): Promise<CandidateResponse> {
     const { idempotency_key, ...body } = params;
     return this.request<CandidateResponse>({
@@ -43,10 +47,7 @@ export class CandidatesResource extends BaseResource {
     });
   }
 
-  update(
-    candidateId: string,
-    fields: Partial<CandidateCreateParams> & Record<string, unknown>,
-  ): Promise<CandidateResponse> {
+  update(candidateId: string, fields: CandidateUpdateBody): Promise<CandidateResponse> {
     return this.request<CandidateResponse>({
       method: "PATCH",
       path: `/candidates/${encodeURIComponent(candidateId)}`,
@@ -65,8 +66,9 @@ export class CandidatesResource extends BaseResource {
    * The URL identifies the row; any ``external_id`` on the body is ignored.
    */
   upsert(
-    params: { external_id: string; idempotency_key?: string } & Partial<
-      Omit<CandidateCreateParams, "external_id">
+    params: { external_id: string; idempotency_key?: string } & Omit<
+      CandidateCreateBody,
+      "external_id"
     >,
   ): Promise<CandidateResponse> {
     const { external_id, idempotency_key, ...body } = params;

@@ -569,6 +569,121 @@ describe("0.4.1 security fixes", () => {
   });
 });
 
+// 0.6.0 — DX gaps from Selky's typed-resource swap (#754) and #654's
+// migration of resource param signatures to the generated openapi bodies.
+describe("0.6.0 resource-body migration (#654 + #754)", () => {
+  describe("disputes.create sends the spec's field names (bug fix)", () => {
+    it("forwards reason + reason_detail + disputed_item_ids as the server expects", async () => {
+      // Prior hand-written signature sent `disputed_items` + `explanation`,
+      // neither of which the spec defines — every call 422'd. This test
+      // pins the correct wire shape.
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: { id: "disp_1", status: "submitted" },
+      }));
+      await client.disputes.create({
+        check_id: "chk_1",
+        report_id: "rpt_1",
+        reason: "inaccurate_information",
+        reason_detail: "SSN mismatch",
+        disputed_item_ids: ["itm_1", "itm_2"],
+      });
+      expect(calls[0]!.body).toEqual({
+        check_id: "chk_1",
+        report_id: "rpt_1",
+        reason: "inaccurate_information",
+        reason_detail: "SSN mismatch",
+        disputed_item_ids: ["itm_1", "itm_2"],
+      });
+    });
+  });
+
+  describe("exports.create no longer sends the non-existent `filters` field (bug fix)", () => {
+    it("body carries export_type + format only — the spec's shape", async () => {
+      // Prior hand-written signature accepted `filters`, which the server
+      // ignored silently, so a caller expecting a scoped export got a full
+      // one and no signal.
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: { id: "exp_1", status: "queued" },
+      }));
+      await client.exports.create({ export_type: "candidates", format: "csv" });
+      expect(calls[0]!.body).toEqual({ export_type: "candidates", format: "csv" });
+    });
+  });
+
+  describe("candidates.create forwards spec-defined fields the old signature dropped", () => {
+    it("passes middle_name, address_line2, preferred_language through to the body", async () => {
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: {
+          id: "cand_2",
+          first_name: "Jane",
+          last_name: "Doe",
+          organization_id: "org_1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      }));
+      await client.candidates.create({
+        first_name: "Jane",
+        last_name: "Doe",
+        middle_name: "Elizabeth",
+        address_line1: "1 Main",
+        address_line2: "Apt 2",
+        address_city: "SF",
+        address_state: "CA",
+        address_zip: "94103",
+        preferred_language: "es",
+      });
+      expect(calls[0]!.body).toMatchObject({
+        middle_name: "Elizabeth",
+        address_line2: "Apt 2",
+        preferred_language: "es",
+      });
+    });
+  });
+
+  describe("checks.create forwards spec-defined fields added after the hand-written type froze", () => {
+    it("passes salary_amount + salary_currency + insurance_subtype through to the body", async () => {
+      const { client, calls } = mockClient(() => ({
+        status: 201,
+        body: { id: "chk_2" },
+      }));
+      await client.checks.create({
+        candidate_id: "cand_1",
+        salary_amount: "75000",
+        salary_currency: "USD",
+        insurance_subtype: "commercial_auto",
+      });
+      expect(calls[0]!.body).toMatchObject({
+        salary_amount: "75000",
+        salary_currency: "USD",
+        insurance_subtype: "commercial_auto",
+      });
+    });
+
+    it("explicit undefined on a defaulted field falls back to the SDK default", async () => {
+      // Callers frequently build the params object conditionally
+      // (``{ candidate_id, package: maybePkg ?? undefined }``). Spreading
+      // over defaults would otherwise leak ``package: undefined`` into the
+      // body and the server would 422 on the required field.
+      const { client, calls } = mockClient(() => ({ status: 201, body: { id: "chk_3" } }));
+      await client.checks.create({
+        candidate_id: "cand_1",
+        package: undefined,
+        permissible_purpose: undefined,
+        purpose_certification: undefined,
+      });
+      expect(calls[0]!.body).toMatchObject({
+        package: "standard",
+        permissible_purpose: "employment",
+        purpose_certification: true,
+      });
+    });
+  });
+});
+
 // 0.5.0 — feedback loop + cleanup.
 describe("0.5.0 changes", () => {
   it("every SDK error message includes the feedback URL", async () => {
