@@ -4413,6 +4413,87 @@
         "title": "CheckCompliance",
         "type": "object"
       },
+      "CheckConfigIssueResponse": {
+        "description": "One validation failure with structured hints for recovery.",
+        "properties": {
+          "detail": {
+            "description": "Human-readable explanation, safe to display in an integrator's UI.",
+            "examples": [
+              "Package 'standard' includes criminal records which are not permitted for credit-purpose checks per §1681b(a)(3). Use one of the compatible packages listed in the hints."
+            ],
+            "title": "Detail",
+            "type": "string"
+          },
+          "error_code": {
+            "description": "Machine-readable code. Registered in ``api/v1/errors.py::ERROR_CODES``; branch on this rather than parsing ``detail``.",
+            "examples": [
+              "PACKAGE_PURPOSE_MISMATCH"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "hints": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Recovery hints — e.g. ``compatible_packages_for_purpose``, ``org_allowed_purposes``, ``valid_purposes``. Keys depend on the ``error_code``; consumers should not assume any specific key is present.",
+            "examples": [
+              {
+                "compatible_packages_for_purpose": [
+                  "basic",
+                  "essential",
+                  "nonprofit"
+                ]
+              }
+            ],
+            "title": "Hints",
+            "type": "object"
+          }
+        },
+        "required": [
+          "error_code",
+          "detail"
+        ],
+        "title": "CheckConfigIssueResponse",
+        "type": "object"
+      },
+      "CheckConfigValidationResponse": {
+        "description": "Pre-flight ``(package, permissible_purpose)`` validation result.\n\nAlways returned with HTTP 200 — ``valid`` in the body says whether the\nwould-be ``POST /checks`` request will pass the synchronous config\nrules. Non-config failures (freezes, blocks, consent lifecycle,\nquota) are NOT covered; a call that gets ``valid: true`` here can\nstill fail at ``POST /checks`` for those reasons.",
+        "properties": {
+          "errors": {
+            "description": "Blocking issues. Empty when ``valid`` is true.",
+            "items": {
+              "$ref": "#/components/schemas/CheckConfigIssueResponse"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "valid": {
+            "description": "True iff no ``errors`` are present. A 200 with ``valid: false`` is expected — check ``errors[].error_code`` for the specific rule that failed.",
+            "examples": [
+              false
+            ],
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "warnings": {
+            "description": "Non-blocking observations. Present in the shape today for forward compatibility — always empty on the current rule set.",
+            "items": {
+              "$ref": "#/components/schemas/CheckConfigIssueResponse"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "title": "CheckConfigValidationResponse",
+        "type": "object"
+      },
       "CheckCreate": {
         "allOf": [
           {
@@ -32804,6 +32885,197 @@
           "checks:write"
         ],
         "x-stability": "beta"
+      }
+    },
+    "/api/v1/checks/validate-config": {
+      "get": {
+        "description": "Pre-flight ``(package, permissible_purpose)`` validation for #381.\n\nAnswers \"will ``POST /checks`` reject this combination?\" without\nactually POSTing anything or burning quota. Always returns 200; the\n``valid`` flag in the body says whether the config passes the\nsynchronous rules.\n\n**What this covers.** All synchronous, side-effect-free rules that\n``POST /checks`` (and ``POST /checks/{id}/submit``) apply:\n\n- purpose is a recognised FCRA §1681b(a) value\n- purpose is in the org's ``allowed_purposes`` (when configured)\n- package/purpose compatibility per §1681b(a)(3)\n- ``insurance`` purpose requires ``insurance_subtype``\n\n**What this does NOT cover.** Consent lifecycle, freezes / fraud\nalerts, identity-theft blocks, certification-text-hash presence,\nretention windows, quota, sandbox-vs-live gating. A response with\n``valid: true`` says the config is compatible — a subsequent\n``POST /checks`` can still fail on any of those.\n\n**Required scope:** ``checks:read``.",
+        "operationId": "validate_config_api_v1_checks_validate_config_get",
+        "parameters": [
+          {
+            "description": "Package slug the integrator plans to send on ``POST /checks``.",
+            "in": "query",
+            "name": "package",
+            "required": true,
+            "schema": {
+              "description": "Package slug the integrator plans to send on ``POST /checks``.",
+              "examples": [
+                "standard"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Package",
+              "type": "string"
+            }
+          },
+          {
+            "description": "FCRA permissible purpose the integrator plans to send.",
+            "in": "query",
+            "name": "permissible_purpose",
+            "required": true,
+            "schema": {
+              "description": "FCRA permissible purpose the integrator plans to send.",
+              "examples": [
+                "employment"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Permissible Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+            "in": "query",
+            "name": "insurance_subtype",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+              "examples": [
+                "underwriting"
+              ],
+              "title": "Insurance Subtype"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckConfigValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid API key / JWT token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Valid credentials but insufficient scope"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consent not captured, expired, or certification required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consumer has an active security freeze"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Pre-flight check-configuration validation",
+        "tags": [
+          "checks"
+        ],
+        "x-audience": "partner",
+        "x-error-codes": {
+          "200": [
+            "INVALID_PERMISSIBLE_PURPOSE",
+            "PURPOSE_NOT_ALLOWED",
+            "PACKAGE_PURPOSE_MISMATCH",
+            "INSURANCE_SUBTYPE_REQUIRED"
+          ],
+          "401": [
+            "API_KEY_REMINT_REQUIRED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ]
+        },
+        "x-required-scopes": [
+          "checks:read"
+        ],
+        "x-stability": "stable"
       }
     },
     "/api/v1/checks/{check_id}": {
@@ -71305,6 +71577,197 @@
           "checks:write"
         ],
         "x-stability": "beta"
+      }
+    },
+    "/api/v2/checks/validate-config": {
+      "get": {
+        "description": "Pre-flight ``(package, permissible_purpose)`` validation for #381.\n\nAnswers \"will ``POST /checks`` reject this combination?\" without\nactually POSTing anything or burning quota. Always returns 200; the\n``valid`` flag in the body says whether the config passes the\nsynchronous rules.\n\n**What this covers.** All synchronous, side-effect-free rules that\n``POST /checks`` (and ``POST /checks/{id}/submit``) apply:\n\n- purpose is a recognised FCRA §1681b(a) value\n- purpose is in the org's ``allowed_purposes`` (when configured)\n- package/purpose compatibility per §1681b(a)(3)\n- ``insurance`` purpose requires ``insurance_subtype``\n\n**What this does NOT cover.** Consent lifecycle, freezes / fraud\nalerts, identity-theft blocks, certification-text-hash presence,\nretention windows, quota, sandbox-vs-live gating. A response with\n``valid: true`` says the config is compatible — a subsequent\n``POST /checks`` can still fail on any of those.\n\n**Required scope:** ``checks:read``.",
+        "operationId": "validate_config_api_v2_checks_validate_config_get",
+        "parameters": [
+          {
+            "description": "Package slug the integrator plans to send on ``POST /checks``.",
+            "in": "query",
+            "name": "package",
+            "required": true,
+            "schema": {
+              "description": "Package slug the integrator plans to send on ``POST /checks``.",
+              "examples": [
+                "standard"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Package",
+              "type": "string"
+            }
+          },
+          {
+            "description": "FCRA permissible purpose the integrator plans to send.",
+            "in": "query",
+            "name": "permissible_purpose",
+            "required": true,
+            "schema": {
+              "description": "FCRA permissible purpose the integrator plans to send.",
+              "examples": [
+                "employment"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Permissible Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+            "in": "query",
+            "name": "insurance_subtype",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+              "examples": [
+                "underwriting"
+              ],
+              "title": "Insurance Subtype"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckConfigValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid API key / JWT token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Valid credentials but insufficient scope"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consent not captured, expired, or certification required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consumer has an active security freeze"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Pre-flight check-configuration validation",
+        "tags": [
+          "checks"
+        ],
+        "x-audience": "partner",
+        "x-error-codes": {
+          "200": [
+            "INVALID_PERMISSIBLE_PURPOSE",
+            "PURPOSE_NOT_ALLOWED",
+            "PACKAGE_PURPOSE_MISMATCH",
+            "INSURANCE_SUBTYPE_REQUIRED"
+          ],
+          "401": [
+            "API_KEY_REMINT_REQUIRED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ]
+        },
+        "x-required-scopes": [
+          "checks:read"
+        ],
+        "x-stability": "stable"
       }
     },
     "/api/v2/checks/{check_id}": {
