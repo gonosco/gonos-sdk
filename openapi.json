@@ -4413,6 +4413,87 @@
         "title": "CheckCompliance",
         "type": "object"
       },
+      "CheckConfigIssueResponse": {
+        "description": "One validation failure with structured hints for recovery.",
+        "properties": {
+          "detail": {
+            "description": "Human-readable explanation, safe to display in an integrator's UI.",
+            "examples": [
+              "Package 'standard' includes criminal records which are not permitted for credit-purpose checks per §1681b(a)(3). Use one of the compatible packages listed in the hints."
+            ],
+            "title": "Detail",
+            "type": "string"
+          },
+          "error_code": {
+            "description": "Machine-readable code. Registered in ``api/v1/errors.py::ERROR_CODES``; branch on this rather than parsing ``detail``.",
+            "examples": [
+              "PACKAGE_PURPOSE_MISMATCH"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "hints": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Recovery hints — e.g. ``compatible_packages_for_purpose``, ``org_allowed_purposes``, ``valid_purposes``. Keys depend on the ``error_code``; consumers should not assume any specific key is present.",
+            "examples": [
+              {
+                "compatible_packages_for_purpose": [
+                  "basic",
+                  "essential",
+                  "nonprofit"
+                ]
+              }
+            ],
+            "title": "Hints",
+            "type": "object"
+          }
+        },
+        "required": [
+          "error_code",
+          "detail"
+        ],
+        "title": "CheckConfigIssueResponse",
+        "type": "object"
+      },
+      "CheckConfigValidationResponse": {
+        "description": "Pre-flight ``(package, permissible_purpose)`` validation result.\n\nAlways returned with HTTP 200 — ``valid`` in the body says whether the\nwould-be ``POST /checks`` request will pass the synchronous config\nrules. Non-config failures (freezes, blocks, consent lifecycle,\nquota) are NOT covered; a call that gets ``valid: true`` here can\nstill fail at ``POST /checks`` for those reasons.",
+        "properties": {
+          "errors": {
+            "description": "Blocking issues. Empty when ``valid`` is true.",
+            "items": {
+              "$ref": "#/components/schemas/CheckConfigIssueResponse"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "valid": {
+            "description": "True iff no ``errors`` are present. A 200 with ``valid: false`` is expected — check ``errors[].error_code`` for the specific rule that failed.",
+            "examples": [
+              false
+            ],
+            "title": "Valid",
+            "type": "boolean"
+          },
+          "warnings": {
+            "description": "Non-blocking observations. Present in the shape today for forward compatibility — always empty on the current rule set.",
+            "items": {
+              "$ref": "#/components/schemas/CheckConfigIssueResponse"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "title": "CheckConfigValidationResponse",
+        "type": "object"
+      },
       "CheckCreate": {
         "allOf": [
           {
@@ -19190,6 +19271,98 @@
         "title": "SandboxStatusResponse",
         "type": "object"
       },
+      "SandboxTriggerRequest": {
+        "description": "Fire a synthetic webhook event on demand (sandbox only).\n\nSelky's ask (#742, half of rec #9): \"a ``stripe trigger`` equivalent\nso we can fire ``check.completed`` on demand instead of waiting on\nsandbox timing\". The payload for the fired event is built by the\nsame code path production uses, so an integrator's receiver sees a\nbody indistinguishable from the real thing — the ``#549`` failure\nmode of a documented-but-never-actually-sent payload doesn't apply\nhere.",
+        "properties": {
+          "check_id": {
+            "description": "The check the fired event describes. Must belong to this organization. The trigger reads current DB state on the check (and its non-superseded report, if any) to assemble the payload — the same source of truth the real dispatcher uses at finalization time.",
+            "examples": [
+              "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+            ],
+            "title": "Check Id",
+            "type": "string"
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional override for the ``disposition`` field in the fired payload. Useful when the check has not produced a report yet — without this the trigger falls back to the sandbox default ``\"clear\"``. When the check already has a report, its disposition wins unless this value is supplied.",
+            "examples": [
+              "consider"
+            ],
+            "title": "Disposition"
+          },
+          "event": {
+            "description": "Webhook event to fire. Currently the trigger surface only supports ``check.completed``; other ``WebhookEventType`` values are rejected with a ``TRIGGER_EVENT_NOT_SUPPORTED`` 422 (tracked as a follow-up).",
+            "examples": [
+              "check.completed"
+            ],
+            "title": "Event",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "check_id"
+        ],
+        "title": "SandboxTriggerRequest",
+        "type": "object"
+      },
+      "SandboxTriggerResponse": {
+        "description": "Outcome of a sandbox trigger request.",
+        "properties": {
+          "check_id": {
+            "description": "Check the fired event describes.",
+            "title": "Check Id",
+            "type": "string"
+          },
+          "endpoint_count": {
+            "description": "Number of matching webhook endpoints the event was staged for. Each staged delivery either reaches the receiver (if ``deliver_in_sandbox`` is opted in AND the endpoint is verified) or lands in the sandbox capture buffer.",
+            "examples": [
+              1
+            ],
+            "title": "Endpoint Count",
+            "type": "integer"
+          },
+          "event": {
+            "description": "Event type that was fired.",
+            "examples": [
+              "check.completed"
+            ],
+            "title": "Event",
+            "type": "string"
+          },
+          "fired": {
+            "description": "True iff at least one webhook endpoint was matched and dispatched (or captured, depending on each endpoint's ``deliver_in_sandbox`` gate). False when the organization has no endpoint subscribed to this event.",
+            "examples": [
+              true
+            ],
+            "title": "Fired",
+            "type": "boolean"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "description": "The exact payload the dispatcher will send to receivers. Returned in the response so an integrator can inspect what was fired without a round-trip through ``GET /sandbox/webhooks``. Byte-identical to what production sends at real finalization time (that's the point of #742).",
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "fired",
+          "event",
+          "check_id",
+          "endpoint_count",
+          "payload"
+        ],
+        "title": "SandboxTriggerResponse",
+        "type": "object"
+      },
       "SandboxWebhookCapture": {
         "description": "A single captured sandbox webhook payload.",
         "properties": {
@@ -21802,6 +21975,12 @@
             "description": "PEM-encoded private key for the mTLS client certificate (max 16 KB)",
             "title": "Client Key Pem"
           },
+          "deliver_in_sandbox": {
+            "default": false,
+            "description": "Sandbox only. When true (and the endpoint has been verified via POST /webhooks/{id}/verify), sandbox webhooks — including events fired by POST /sandbox/triggers — are delivered instead of captured. Default false keeps the log-only capture semantics every existing endpoint has today.",
+            "title": "Deliver In Sandbox",
+            "type": "boolean"
+          },
           "events": {
             "description": "Event types to subscribe to (e.g., check.completed, report.ready)",
             "examples": [
@@ -21841,6 +22020,12 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "deliver_in_sandbox": {
+            "default": false,
+            "description": "Sandbox delivery opt-in for this endpoint. Effective at delivery time only once the endpoint has been verified.",
+            "title": "Deliver In Sandbox",
+            "type": "boolean"
           },
           "events": {
             "anyOf": [
@@ -21934,6 +22119,12 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "deliver_in_sandbox": {
+            "default": false,
+            "description": "Sandbox only. When true (and ``verified_at`` is non-null), sandbox webhooks — including events fired by POST /sandbox/triggers — reach this endpoint instead of being captured by the sandbox log-only buffer.",
+            "title": "Deliver In Sandbox",
+            "type": "boolean"
           },
           "events": {
             "anyOf": [
@@ -22034,6 +22225,18 @@
             ],
             "description": "New PEM-encoded private key (empty string clears it)",
             "title": "Client Key Pem"
+          },
+          "deliver_in_sandbox": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sandbox only. Set true to deliver sandbox webhooks (including those fired by POST /sandbox/triggers) to this endpoint. Requires the endpoint to be verified. None leaves the current setting unchanged.",
+            "title": "Deliver In Sandbox"
           },
           "events": {
             "anyOf": [
@@ -32804,6 +33007,197 @@
           "checks:write"
         ],
         "x-stability": "beta"
+      }
+    },
+    "/api/v1/checks/validate-config": {
+      "get": {
+        "description": "Pre-flight ``(package, permissible_purpose)`` validation for #381.\n\nAnswers \"will ``POST /checks`` reject this combination?\" without\nactually POSTing anything or burning quota. Always returns 200; the\n``valid`` flag in the body says whether the config passes the\nsynchronous rules.\n\n**What this covers.** All synchronous, side-effect-free rules that\n``POST /checks`` (and ``POST /checks/{id}/submit``) apply:\n\n- purpose is a recognised FCRA §1681b(a) value\n- purpose is in the org's ``allowed_purposes`` (when configured)\n- package/purpose compatibility per §1681b(a)(3)\n- ``insurance`` purpose requires ``insurance_subtype``\n\n**What this does NOT cover.** Consent lifecycle, freezes / fraud\nalerts, identity-theft blocks, certification-text-hash presence,\nretention windows, quota, sandbox-vs-live gating. A response with\n``valid: true`` says the config is compatible — a subsequent\n``POST /checks`` can still fail on any of those.\n\n**Required scope:** ``checks:read``.",
+        "operationId": "validate_config_api_v1_checks_validate_config_get",
+        "parameters": [
+          {
+            "description": "Package slug the integrator plans to send on ``POST /checks``.",
+            "in": "query",
+            "name": "package",
+            "required": true,
+            "schema": {
+              "description": "Package slug the integrator plans to send on ``POST /checks``.",
+              "examples": [
+                "standard"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Package",
+              "type": "string"
+            }
+          },
+          {
+            "description": "FCRA permissible purpose the integrator plans to send.",
+            "in": "query",
+            "name": "permissible_purpose",
+            "required": true,
+            "schema": {
+              "description": "FCRA permissible purpose the integrator plans to send.",
+              "examples": [
+                "employment"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Permissible Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+            "in": "query",
+            "name": "insurance_subtype",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+              "examples": [
+                "underwriting"
+              ],
+              "title": "Insurance Subtype"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckConfigValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid API key / JWT token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Valid credentials but insufficient scope"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consent not captured, expired, or certification required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consumer has an active security freeze"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Pre-flight check-configuration validation",
+        "tags": [
+          "checks"
+        ],
+        "x-audience": "partner",
+        "x-error-codes": {
+          "200": [
+            "INVALID_PERMISSIBLE_PURPOSE",
+            "PURPOSE_NOT_ALLOWED",
+            "PACKAGE_PURPOSE_MISMATCH",
+            "INSURANCE_SUBTYPE_REQUIRED"
+          ],
+          "401": [
+            "API_KEY_REMINT_REQUIRED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ]
+        },
+        "x-required-scopes": [
+          "checks:read"
+        ],
+        "x-stability": "stable"
       }
     },
     "/api/v1/checks/{check_id}": {
@@ -57304,6 +57698,143 @@
         "x-stability": "stable"
       }
     },
+    "/api/v1/sandbox/triggers": {
+      "post": {
+        "description": "Selky's `stripe trigger` equivalent (#742, half of rec #9). Fires a webhook event whose payload is byte-identical to what the real dispatch path produces at finalization — the same code path builds both, so an integrator's receiver sees a body indistinguishable from production. Delivery per endpoint is gated on the receiving endpoint's ``deliver_in_sandbox`` opt-in AND its verification status (`verified_at` non-null); endpoints that fail either gate keep landing in the sandbox capture buffer. Sandbox-only; rejected on a live (``gn_live_*``) API key the same way ``X-Gonos-Test-Disposition`` is (#727).",
+        "operationId": "trigger_sandbox_event_api_v1_sandbox_triggers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxTriggerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Fire a synthetic webhook event on demand (sandbox only)",
+        "tags": [
+          "sandbox"
+        ],
+        "x-audience": "partner",
+        "x-error-codes": {
+          "401": [
+            "API_KEY_REMINT_REQUIRED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ],
+          "422": [
+            "TRIGGER_LIVE_KEY_REJECTED",
+            "TRIGGER_EVENT_NOT_SUPPORTED",
+            "VALIDATION_ERROR"
+          ]
+        },
+        "x-required-scopes": [],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/sandbox/webhooks": {
       "delete": {
         "description": "Delete all captured sandbox webhook payloads for this organization.",
@@ -57710,7 +58241,7 @@
     },
     "/api/v1/screenings": {
       "post": {
-        "description": "Create a candidate, a pending check, and a hosted consent session.\n\nReturns the three ids plus `hosted_url` — redirect the candidate\nthere and Gonos handles disclosure, signature, and the FCRA paper\ntrail.\n\n**Atomic.** All three rows are created in one transaction. If any\nstep fails, nothing is persisted — there is no partial state for you\nto reconcile, and a retry is safe.\n\n**The check is not submitted.** It is created `pending`. Consent must\nbe signed first (§1681b(b)(2)); submit it afterwards with\n`POST /checks/{id}/submit`, or let your webhook on `consent.signed`\ndo it.\n\n**`disclosure_type` is derived** from `permissible_purpose` — you do\nnot need to know that employment requires a standalone disclosure.\n\n**`external_id` reuses.** If a candidate with that `external_id`\nalready exists in your organization, it is reused rather than\nrejected, and `candidate_reused` says so.\n\n**Required scope:** `candidates:write` and `checks:write` (both).",
+        "description": "Create a candidate, a pending check, and a hosted consent session.\n\nReturns the three ids plus `hosted_url` — redirect the candidate\nthere and Gonos handles disclosure, signature, and the FCRA paper\ntrail.\n\n**Atomic.** All three rows are created in one transaction. If any\nstep fails, nothing is persisted — there is no partial state for you\nto reconcile, and a retry is safe.\n\n**The check is not submitted.** It is created `pending`. Consent must\nbe signed first (§1681b(b)(2)); submit it afterwards with\n`POST /checks/{id}/submit`, or let your webhook on\n`consent_session.completed` do it.\n\n**`disclosure_type` is derived** from `permissible_purpose` — you do\nnot need to know that employment requires a standalone disclosure.\n\n**`external_id` reuses.** If a candidate with that `external_id`\nalready exists in your organization, it is reused rather than\nrejected, and `candidate_reused` says so.\n\n**Required scope:** `candidates:write` and `checks:write` (both).",
         "operationId": "create_screening_api_v1_screenings_post",
         "parameters": [
           {
@@ -71305,6 +71836,197 @@
           "checks:write"
         ],
         "x-stability": "beta"
+      }
+    },
+    "/api/v2/checks/validate-config": {
+      "get": {
+        "description": "Pre-flight ``(package, permissible_purpose)`` validation for #381.\n\nAnswers \"will ``POST /checks`` reject this combination?\" without\nactually POSTing anything or burning quota. Always returns 200; the\n``valid`` flag in the body says whether the config passes the\nsynchronous rules.\n\n**What this covers.** All synchronous, side-effect-free rules that\n``POST /checks`` (and ``POST /checks/{id}/submit``) apply:\n\n- purpose is a recognised FCRA §1681b(a) value\n- purpose is in the org's ``allowed_purposes`` (when configured)\n- package/purpose compatibility per §1681b(a)(3)\n- ``insurance`` purpose requires ``insurance_subtype``\n\n**What this does NOT cover.** Consent lifecycle, freezes / fraud\nalerts, identity-theft blocks, certification-text-hash presence,\nretention windows, quota, sandbox-vs-live gating. A response with\n``valid: true`` says the config is compatible — a subsequent\n``POST /checks`` can still fail on any of those.\n\n**Required scope:** ``checks:read``.",
+        "operationId": "validate_config_api_v2_checks_validate_config_get",
+        "parameters": [
+          {
+            "description": "Package slug the integrator plans to send on ``POST /checks``.",
+            "in": "query",
+            "name": "package",
+            "required": true,
+            "schema": {
+              "description": "Package slug the integrator plans to send on ``POST /checks``.",
+              "examples": [
+                "standard"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Package",
+              "type": "string"
+            }
+          },
+          {
+            "description": "FCRA permissible purpose the integrator plans to send.",
+            "in": "query",
+            "name": "permissible_purpose",
+            "required": true,
+            "schema": {
+              "description": "FCRA permissible purpose the integrator plans to send.",
+              "examples": [
+                "employment"
+              ],
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Permissible Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+            "in": "query",
+            "name": "insurance_subtype",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Insurance sub-purpose (required when ``permissible_purpose`` is ``insurance``). See ``ALLOWED_INSURANCE_SUBTYPES`` in the schemas module for accepted values.",
+              "examples": [
+                "underwriting"
+              ],
+              "title": "Insurance Subtype"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckConfigValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid API key / JWT token"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Valid credentials but insufficient scope"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consent not captured, expired, or certification required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Consumer has an active security freeze"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Pre-flight check-configuration validation",
+        "tags": [
+          "checks"
+        ],
+        "x-audience": "partner",
+        "x-error-codes": {
+          "200": [
+            "INVALID_PERMISSIBLE_PURPOSE",
+            "PURPOSE_NOT_ALLOWED",
+            "PACKAGE_PURPOSE_MISMATCH",
+            "INSURANCE_SUBTYPE_REQUIRED"
+          ],
+          "401": [
+            "API_KEY_REMINT_REQUIRED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ]
+        },
+        "x-required-scopes": [
+          "checks:read"
+        ],
+        "x-stability": "stable"
       }
     },
     "/api/v2/checks/{check_id}": {
@@ -96950,6 +97672,143 @@
         "x-stability": "stable"
       }
     },
+    "/api/v2/sandbox/triggers": {
+      "post": {
+        "description": "Selky's `stripe trigger` equivalent (#742, half of rec #9). Fires a webhook event whose payload is byte-identical to what the real dispatch path produces at finalization — the same code path builds both, so an integrator's receiver sees a body indistinguishable from production. Delivery per endpoint is gated on the receiving endpoint's ``deliver_in_sandbox`` opt-in AND its verification status (`verified_at` non-null); endpoints that fail either gate keep landing in the sandbox capture buffer. Sandbox-only; rejected on a live (``gn_live_*``) API key the same way ``X-Gonos-Test-Disposition`` is (#727).",
+        "operationId": "trigger_sandbox_event_api_v2_sandbox_triggers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SandboxTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxTriggerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Fire a synthetic webhook event on demand (sandbox only)",
+        "tags": [
+          "sandbox"
+        ],
+        "x-audience": "partner",
+        "x-error-codes": {
+          "401": [
+            "API_KEY_REMINT_REQUIRED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ],
+          "422": [
+            "TRIGGER_LIVE_KEY_REJECTED",
+            "TRIGGER_EVENT_NOT_SUPPORTED",
+            "VALIDATION_ERROR"
+          ]
+        },
+        "x-required-scopes": [],
+        "x-stability": "beta"
+      }
+    },
     "/api/v2/sandbox/webhooks": {
       "delete": {
         "description": "Delete all captured sandbox webhook payloads for this organization.",
@@ -97356,7 +98215,7 @@
     },
     "/api/v2/screenings": {
       "post": {
-        "description": "Create a candidate, a pending check, and a hosted consent session.\n\nReturns the three ids plus `hosted_url` — redirect the candidate\nthere and Gonos handles disclosure, signature, and the FCRA paper\ntrail.\n\n**Atomic.** All three rows are created in one transaction. If any\nstep fails, nothing is persisted — there is no partial state for you\nto reconcile, and a retry is safe.\n\n**The check is not submitted.** It is created `pending`. Consent must\nbe signed first (§1681b(b)(2)); submit it afterwards with\n`POST /checks/{id}/submit`, or let your webhook on `consent.signed`\ndo it.\n\n**`disclosure_type` is derived** from `permissible_purpose` — you do\nnot need to know that employment requires a standalone disclosure.\n\n**`external_id` reuses.** If a candidate with that `external_id`\nalready exists in your organization, it is reused rather than\nrejected, and `candidate_reused` says so.\n\n**Required scope:** `candidates:write` and `checks:write` (both).",
+        "description": "Create a candidate, a pending check, and a hosted consent session.\n\nReturns the three ids plus `hosted_url` — redirect the candidate\nthere and Gonos handles disclosure, signature, and the FCRA paper\ntrail.\n\n**Atomic.** All three rows are created in one transaction. If any\nstep fails, nothing is persisted — there is no partial state for you\nto reconcile, and a retry is safe.\n\n**The check is not submitted.** It is created `pending`. Consent must\nbe signed first (§1681b(b)(2)); submit it afterwards with\n`POST /checks/{id}/submit`, or let your webhook on\n`consent_session.completed` do it.\n\n**`disclosure_type` is derived** from `permissible_purpose` — you do\nnot need to know that employment requires a standalone disclosure.\n\n**`external_id` reuses.** If a candidate with that `external_id`\nalready exists in your organization, it is reused rather than\nrejected, and `candidate_reused` says so.\n\n**Required scope:** `candidates:write` and `checks:write` (both).",
         "operationId": "create_screening_api_v2_screenings_post",
         "parameters": [
           {
