@@ -151,19 +151,25 @@ describe("GonosClient resources", () => {
     expect(url.searchParams.get("status")).toBe("completed");
   });
 
-  it("reports.get returns the first item from the paginated response", async () => {
-    const { client } = mockClient(() => ({
+  it("reports.get uses the API's check report subresource", async () => {
+    const { client, calls } = mockClient(() => ({
       status: 200,
       body: {
-        items: [
-          { id: "rpt_1", check_id: "chk_1", status: "ready", created_at: "2026-01-01T00:00:00Z" },
-          { id: "rpt_2", check_id: "chk_1", status: "ready", created_at: "2026-01-02T00:00:00Z" },
-        ],
+        id: "rpt_1",
+        check_id: "chk/1 special",
+        status: "final",
+        disposition: "clear",
+        created_at: "2026-01-01T00:00:00Z",
       },
     }));
 
-    const report = await client.reports.get("chk_1");
+    const report = await client.reports.get("chk/1 special");
     expect(report.id).toBe("rpt_1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("GET");
+    expect(calls[0]!.url).toBe(
+      "https://api.example.com/api/v1/checks/chk%2F1%20special/report",
+    );
   });
 
   it("delete returns void on 204 without throwing", async () => {

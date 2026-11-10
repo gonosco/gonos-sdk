@@ -1,23 +1,12 @@
 import { BaseResource } from "./base.js";
-import { NotFoundError } from "../errors.js";
 import type { CheckItemResponse, ReportResponse } from "../api-types.js";
 
 export class ReportsResource extends BaseResource {
-  /** Fetch the report for a check. The endpoint is paginated; returns the
-   * first (most recent) report, or throws NotFoundError if none exists. */
+  /** Fetch the current report for a check. */
   async get(checkId: string): Promise<ReportResponse> {
-    const data = await this.request<{ items?: ReportResponse[] } & ReportResponse>({
+    return this.request<ReportResponse>({
       method: "GET",
-      path: "/reports",
-      query: { check_id: checkId },
-    });
-    const items = data.items ?? [data];
-    const first = items[0];
-    if (first) return first;
-    throw new NotFoundError({
-      status_code: 404,
-      error: "not_found",
-      detail: "No report found",
+      path: `/checks/${encodeURIComponent(checkId)}/report`,
     });
   }
 
