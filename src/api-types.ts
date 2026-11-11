@@ -89,12 +89,15 @@ export type WebhookEventType = Schemas["WebhookEventType"];
 // you need typed access to fields specific to a payload we haven't
 // carved out yet.
 export type CheckCompletedPayload = Schemas["CheckCompletedPayload"];
-export type CheckPartialPayload = Schemas["CheckPartialPayload"];
+export type CheckUpdatedPayload = Schemas["CheckUpdatedPayload"];
 export type ConsentSignedPayload = Schemas["ConsentSignedPayload"];
 export type ReportReadyPayload = Schemas["ReportReadyPayload"];
 export type AdverseActionCreatedPayload = Schemas["AdverseActionCreatedPayload"];
 export type AdverseActionPreNoticeSentPayload = Schemas["AdverseActionPreNoticeSentPayload"];
-export type AdverseActionFinalNoticeSentPayload = Schemas["AdverseActionFinalNoticeSentPayload"];
+export type AdverseActionFinalizedPayload = Schemas["AdverseActionFinalizedPayload"];
+export type AdverseActionCompletedPayload = Schemas["AdverseActionCompletedPayload"];
+/** @deprecated Use AdverseActionCompletedPayload. */
+export type AdverseActionFinalNoticeSentPayload = AdverseActionCompletedPayload;
 export type DisputeSubmittedPayload = Schemas["DisputeSubmittedPayload"];
 export type DisputeResolvedPayload = Schemas["DisputeResolvedPayload"];
 export type WebhookPayloadCatalog = Schemas["WebhookPayloadCatalog"];
