@@ -5794,7 +5794,7 @@
                 "type": "null"
               }
             ],
-            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Unused keys are silently ignored; a source whose adapter does not take county/state kwargs is unaffected. Values are validated at submit time against the registered adapter.",
+            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Only sources whose adapter opts into the jurisdiction contract are accepted (#2769); passing a non-jurisdictional key — OFAC, PACER, drug-test providers, etc. — is a 400 at submit, not a silent no-op. Values are validated at submit time against the registered adapter.",
             "examples": [
               {
                 "informdata_criminal_federal": {
