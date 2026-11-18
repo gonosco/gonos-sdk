@@ -66,7 +66,7 @@
         "type": "string"
       },
       "AccommodationUpdateResponse": {
-        "description": "Response for PATCH /consumer/accommodation.",
+        "description": "Response for GET/PATCH /consumer/accommodation.",
         "properties": {
           "accommodation_requested": {
             "anyOf": [
@@ -5794,7 +5794,7 @@
                 "type": "null"
               }
             ],
-            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Unused keys are silently ignored; a source whose adapter does not take county/state kwargs is unaffected. Values are validated at submit time against the registered adapter.",
+            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Only sources whose adapter opts into the jurisdiction contract are accepted (#2769); passing a non-jurisdictional key — OFAC, PACER, drug-test providers, etc. — is a 400 at submit, not a silent no-op. Values are validated at submit time against the registered adapter.",
             "examples": [
               {
                 "informdata_criminal_federal": {
@@ -5862,6 +5862,40 @@
             "description": "ISO 4217 currency code (e.g. USD, EUR). Defaults to USD if omitted.",
             "title": "Salary Currency",
             "x-added-in": "2026-03-04"
+          },
+          "work_address_city": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the job is physically performed — city name as free text. Normalised the same way candidate address_city is for jurisdiction lookup. Optional; see work_address_state.",
+            "examples": [
+              "Seattle"
+            ],
+            "title": "Work Address City",
+            "x-added-in": "2026-11-14"
+          },
+          "work_address_state": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the job is physically performed — US state (two-letter code preferred). For ordinances keyed on work location rather than candidate home: Seattle Mun. Code 14.17 (trigger ≥50% of hours in Seattle), ADR 0157. Optional; when unset the H-11 ban-the-box warning still fires based on candidate home address alone. Stored encrypted at rest.",
+            "examples": [
+              "WA"
+            ],
+            "title": "Work Address State",
+            "x-added-in": "2026-11-14"
           }
         },
         "required": [
@@ -20192,6 +20226,7 @@
         "enum": [
           "pending",
           "queued",
+          "sending",
           "delivered",
           "failed",
           "cancelled"
@@ -29952,7 +29987,7 @@
             "items": {
               "$ref": "#/components/schemas/WebhookEventType"
             },
-            "maxItems": 55,
+            "maxItems": 58,
             "title": "Events",
             "type": "array",
             "x-added-in": "2026-02-07"
@@ -30319,10 +30354,13 @@
           "adverse_action.finalized",
           "adverse_action.created",
           "adverse_action.cancelled",
+          "adverse_action.withdrawn",
           "adverse_action.completed",
           "adjudication_decision.recorded",
           "action_items.escalated",
           "check.failed",
+          "check.expired",
+          "check.consent_invalid",
           "consent.revoked",
           "dispute.resolved",
           "dispute.filed",
@@ -47340,6 +47378,108 @@
       }
     },
     "/api/v1/consumer/accommodation": {
+      "get": {
+        "description": "Return the consumer's saved accessibility accommodation.\n\n#2180: session authentication is sufficient, matching the PATCH route.\nRequiring §1681h(a)(1) identity factors here would recreate the barrier\nthat #1271 deliberately removed from accommodation preferences.",
+        "operationId": "get_accommodation_api_v1_consumer_accommodation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccommodationUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get accommodation preferences",
+        "tags": [
+          "consumer"
+        ],
+        "x-audience": "consumer",
+        "x-error-codes": {
+          "401": [
+            "AUTHENTICATION_FAILED",
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "ACCOUNT_NOT_LINKED",
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ]
+        },
+        "x-required-org-roles": [
+          "consumer"
+        ],
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      },
       "patch": {
         "description": "Update accessibility accommodation preferences for consumer disclosures.\n\n#1271 decision 1: no §1681h(a)(1) identity gate. §1681h(a)(1) protects\nfile disclosure, not display preferences; the SSN4+DOB entry the gate\nrequires is itself the barrier the accessibility feature exists to\nprevent for its target population. Session authentication (``CurrentUser``)\nremains.\n\nPartial update: only the provided fields are modified; omitted fields\nretain their current values.",
         "operationId": "update_accommodation_api_v1_consumer_accommodation_patch",
@@ -91409,6 +91549,130 @@
       }
     },
     "/api/v2/consumer/accommodation": {
+      "get": {
+        "description": "Return the consumer's saved accessibility accommodation.\n\n#2180: session authentication is sufficient, matching the PATCH route.\nRequiring §1681h(a)(1) identity factors here would recreate the barrier\nthat #1271 deliberately removed from accommodation preferences.",
+        "operationId": "get_accommodation_api_v2_consumer_accommodation_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccommodationUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get accommodation preferences",
+        "tags": [
+          "consumer"
+        ],
+        "x-audience": "consumer",
+        "x-error-codes": {
+          "401": [
+            "AUTHENTICATION_FAILED",
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "ACCOUNT_NOT_LINKED",
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ]
+        },
+        "x-required-org-roles": [
+          "consumer"
+        ],
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      },
       "patch": {
         "description": "Update accessibility accommodation preferences for consumer disclosures.\n\n#1271 decision 1: no §1681h(a)(1) identity gate. §1681h(a)(1) protects\nfile disclosure, not display preferences; the SSN4+DOB entry the gate\nrequires is itself the barrier the accessibility feature exists to\nprevent for its target population. Session authentication (``CurrentUser``)\nremains.\n\nPartial update: only the provided fields are modified; omitted fields\nretain their current values.",
         "operationId": "update_accommodation_api_v2_consumer_accommodation_patch",
