@@ -66,7 +66,7 @@
         "type": "string"
       },
       "AccommodationUpdateResponse": {
-        "description": "Response for PATCH /consumer/accommodation.",
+        "description": "Response for GET/PATCH /consumer/accommodation.",
         "properties": {
           "accommodation_requested": {
             "anyOf": [
@@ -4175,6 +4175,19 @@
             "title": "Address Zip",
             "x-added-in": "2026-02-07"
           },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'called 11/19 re missing SSN'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
+          },
           "alternate_email": {
             "anyOf": [
               {
@@ -4691,6 +4704,19 @@
             ],
             "title": "Address Zip",
             "x-added-in": "2026-02-07"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'called 11/19 re missing SSN'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
           },
           "alternate_email": {
             "anyOf": [
@@ -5794,7 +5820,7 @@
                 "type": "null"
               }
             ],
-            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Unused keys are silently ignored; a source whose adapter does not take county/state kwargs is unaffected. Values are validated at submit time against the registered adapter.",
+            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Only sources whose adapter opts into the jurisdiction contract are accepted (#2769); passing a non-jurisdictional key — OFAC, PACER, drug-test providers, etc. — is a 400 at submit, not a silent no-op. Values are validated at submit time against the registered adapter.",
             "examples": [
               {
                 "informdata_criminal_federal": {
@@ -5862,6 +5888,40 @@
             "description": "ISO 4217 currency code (e.g. USD, EUR). Defaults to USD if omitted.",
             "title": "Salary Currency",
             "x-added-in": "2026-03-04"
+          },
+          "work_address_city": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the job is physically performed — city name as free text. Normalised the same way candidate address_city is for jurisdiction lookup. Optional; see work_address_state.",
+            "examples": [
+              "Seattle"
+            ],
+            "title": "Work Address City",
+            "x-added-in": "2026-11-14"
+          },
+          "work_address_state": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the job is physically performed — US state (two-letter code preferred). For ordinances keyed on work location rather than candidate home: Seattle Mun. Code 14.17 (trigger ≥50% of hours in Seattle), ADR 0157. Optional; when unset the H-11 ban-the-box warning still fires based on candidate home address alone. Stored encrypted at rest.",
+            "examples": [
+              "WA"
+            ],
+            "title": "Work Address State",
+            "x-added-in": "2026-11-14"
           }
         },
         "required": [
@@ -5899,6 +5959,19 @@
             "title": "Adjudication Decisions",
             "type": "array",
             "x-added-in": "2026-06-11"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'waiting on candidate to upload ID copy'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
           },
           "candidate_id": {
             "description": "ID of the candidate being checked",
@@ -6873,6 +6946,19 @@
           }
         ],
         "properties": {
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'waiting on candidate to upload ID copy'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
+          },
           "candidate_id": {
             "description": "ID of the candidate being checked",
             "examples": [
@@ -7494,9 +7580,55 @@
         "title": "ComplianceMetricsResponse",
         "type": "object"
       },
+      "ConsentFlowBranding": {
+        "description": "Resolved branding the candidate-facing page needs to render.\n\nThe candidate sees the business that procured the report, not Gonos\n— §1681b's \"clear and conspicuous\" disclosure of the user of the\nreport, and a basic conversion / trust property (a candidate who\ngets email from \"Acme HR\" must land on a page that reads as Acme,\nnot as the CRA they've never heard of).\n\n``company_name`` is RESOLVED server-side: either\n``settings.branding.company_name_override`` if set, or the org's\nown ``name``. The frontend never has to pick between them.\n\n``logo_url`` and ``primary_color`` are passed through verbatim from\n``settings.branding`` (both validated at write time on\n``organization_settings.py:158,165``) and may be null, which the\nfrontend treats as \"render the default affordance\" (no logo, use\nthe default Tailwind primary).",
+        "properties": {
+          "company_name": {
+            "description": "Resolved display name — ``company_name_override`` when set, falling back to the org's own ``name``. Always non-null so the frontend has one unambiguous string to show.",
+            "title": "Company Name",
+            "type": "string",
+            "x-added-in": "2026-11-20"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "HTTPS URL to the organization's logo, or null.",
+            "title": "Logo Url",
+            "x-added-in": "2026-11-20"
+          },
+          "primary_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hex color (e.g. #1a2b3c) for the CTA + accent, or null.",
+            "title": "Primary Color",
+            "x-added-in": "2026-11-20"
+          }
+        },
+        "required": [
+          "company_name"
+        ],
+        "title": "ConsentFlowBranding",
+        "type": "object"
+      },
       "ConsentFlowPublicResponse": {
         "description": "Session info returned to the candidate on the hosted consent page.\n\nExcludes internal fields (organization_id, token, ip_address, user_agent).\nIncludes only what the candidate needs to review and sign the disclosure.",
         "properties": {
+          "branding": {
+            "$ref": "#/components/schemas/ConsentFlowBranding",
+            "x-added-in": "2026-11-20"
+          },
           "candidate_extended_at": {
             "anyOf": [
               {
@@ -7645,7 +7777,8 @@
           "permissible_purpose",
           "locale",
           "expires_at",
-          "created_at"
+          "created_at",
+          "branding"
         ],
         "title": "ConsentFlowPublicResponse",
         "type": "object"
@@ -10891,7 +11024,7 @@
       },
       "DeliveryMetadataSchema": {
         "additionalProperties": true,
-        "description": "Delivery metadata for notice delivery (email, SMS, fax, etc.).",
+        "description": "Delivery metadata for notice delivery (email, SMS, fax, etc.).\n\n**Reading a bounced §1681m notice.** The receiver writes ``status`` +\n``reason`` onto this blob when the mail provider reports a bounce or a\npermanent failure. Delivered notices do NOT write ``status=\"delivered\"``\n— a successful delivery is indicated by ``delivered_at`` being set. In\nflight: ``status`` is absent and ``delivered_at`` is null.\n\n#2950: before this fix the schema typed a ``delivery_status`` field but\nno writer set it, so an integrator who branched on it to detect a\nbounced notice always saw null. ``delivery_status`` stays on the shape\nfor stability but is deprecated — branch on ``status`` (and treat\n``delivered_at`` as the signal for delivered).",
         "properties": {
           "channel": {
             "anyOf": [
@@ -10929,9 +11062,12 @@
                 "type": "null"
               }
             ],
-            "description": "Status: 'pending', 'delivered', 'bounced', or 'failed'",
+            "deprecated": true,
+            "description": "DEPRECATED (#2950). This field was documented as taking ``'pending' | 'delivered' | 'bounced' | 'failed'`` but no writer ever set it; the receiver writes ``status`` instead. Reads branch on ``status`` (bounced / failed) and ``delivered_at`` (truthy = delivered). Kept on the shape so existing SDK types continue to compile, but SDK codegen will surface the deprecation.",
             "title": "Delivery Status",
-            "x-added-in": "2026-04-01"
+            "x-added-in": "2026-04-01",
+            "x-deprecated-in": "2026-11-21",
+            "x-replaced-by": "status"
           },
           "error": {
             "anyOf": [
@@ -10945,6 +11081,19 @@
             "description": "Error message if delivery failed",
             "title": "Error",
             "x-added-in": "2026-04-01"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free-text failure reason from the provider — e.g. ``'550 5.1.1 recipient unknown'``. Populated by the mail-provider webhook (``provider_events.py``) when ``status`` is ``bounced`` or ``failed``. None otherwise.",
+            "title": "Reason",
+            "x-added-in": "2026-11-21"
           },
           "recipient_email": {
             "anyOf": [
@@ -10972,6 +11121,23 @@
             "description": "When the notice was sent",
             "title": "Sent At",
             "x-added-in": "2026-04-01"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bounced",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Receiver-written terminal failure status. ``bounced`` on a mail-provider bounce, ``failed`` on a permanent delivery failure. None when the notice is in flight OR delivered — the finalization gate (``services/adverse_action/finalization.py``) and the ``notices_bounced`` dashboard count both read this key. Replaces the always-null ``delivery_status`` label (#2950).",
+            "title": "Status",
+            "x-added-in": "2026-11-21"
           }
         },
         "title": "DeliveryMetadataSchema",
@@ -18520,6 +18686,13 @@
             "type": "string",
             "x-added-in": "2026-03-16"
           },
+          "delivery_provider": {
+            "default": "local",
+            "description": "Identity provider delivering this invitation (clerk or local)",
+            "title": "Delivery Provider",
+            "type": "string",
+            "x-added-in": "2026-06-09"
+          },
           "email": {
             "title": "Email",
             "type": "string",
@@ -18574,10 +18747,11 @@
         "type": "object"
       },
       "InvitationWithTokenResponse": {
-        "description": "Invitation record including the acceptance token.\n\nThe token is a bearer credential, so it is returned ONLY on single-record\nowner/admin actions (create and resend) for out-of-band delivery — never in\nlist responses. The org admin forwards the resulting invite link to the\ninvitee, who exchanges the token at ``POST /organization/invitations/accept``.",
+        "description": "Invitation delivery result.\n\nClerk emails production invitations directly, so ``token`` is always null\nfor Clerk delivery. The bearer token is returned only for local-development\ncompatibility and never appears in list responses.",
         "examples": [
           {
             "created_at": "2026-03-15T14:00:00Z",
+            "delivery_provider": "local",
             "email": "newuser@acmescreening.com",
             "expires_at": "2026-03-22T14:00:00Z",
             "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -18606,6 +18780,13 @@
             "title": "Created At",
             "type": "string",
             "x-added-in": "2026-03-16"
+          },
+          "delivery_provider": {
+            "default": "local",
+            "description": "Identity provider delivering this invitation (clerk or local)",
+            "title": "Delivery Provider",
+            "type": "string",
+            "x-added-in": "2026-06-09"
           },
           "email": {
             "title": "Email",
@@ -18649,9 +18830,16 @@
             "x-added-in": "2026-03-16"
           },
           "token": {
-            "description": "One-time invitation token for the accept flow",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Local-development acceptance token; null for Clerk delivery",
             "title": "Token",
-            "type": "string",
             "x-added-in": "2026-06-09"
           }
         },
@@ -18661,8 +18849,7 @@
           "email",
           "role",
           "expires_at",
-          "created_at",
-          "token"
+          "created_at"
         ],
         "title": "InvitationWithTokenResponse",
         "type": "object"
@@ -20192,6 +20379,7 @@
         "enum": [
           "pending",
           "queued",
+          "sending",
           "delivered",
           "failed",
           "cancelled"
@@ -29952,7 +30140,7 @@
             "items": {
               "$ref": "#/components/schemas/WebhookEventType"
             },
-            "maxItems": 55,
+            "maxItems": 58,
             "title": "Events",
             "type": "array",
             "x-added-in": "2026-02-07"
@@ -30319,10 +30507,13 @@
           "adverse_action.finalized",
           "adverse_action.created",
           "adverse_action.cancelled",
+          "adverse_action.withdrawn",
           "adverse_action.completed",
           "adjudication_decision.recorded",
           "action_items.escalated",
           "check.failed",
+          "check.expired",
+          "check.consent_invalid",
           "consent.revoked",
           "dispute.resolved",
           "dispute.filed",
@@ -47340,6 +47531,108 @@
       }
     },
     "/api/v1/consumer/accommodation": {
+      "get": {
+        "description": "Return the consumer's saved accessibility accommodation.\n\n#2180: session authentication is sufficient, matching the PATCH route.\nRequiring §1681h(a)(1) identity factors here would recreate the barrier\nthat #1271 deliberately removed from accommodation preferences.",
+        "operationId": "get_accommodation_api_v1_consumer_accommodation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccommodationUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get accommodation preferences",
+        "tags": [
+          "consumer"
+        ],
+        "x-audience": "consumer",
+        "x-error-codes": {
+          "401": [
+            "AUTHENTICATION_FAILED",
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "ACCOUNT_NOT_LINKED",
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ]
+        },
+        "x-required-org-roles": [
+          "consumer"
+        ],
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      },
       "patch": {
         "description": "Update accessibility accommodation preferences for consumer disclosures.\n\n#1271 decision 1: no §1681h(a)(1) identity gate. §1681h(a)(1) protects\nfile disclosure, not display preferences; the SSN4+DOB entry the gate\nrequires is itself the barrier the accessibility feature exists to\nprevent for its target population. Session authentication (``CurrentUser``)\nremains.\n\nPartial update: only the provided fields are modified; omitted fields\nretain their current values.",
         "operationId": "update_accommodation_api_v1_consumer_accommodation_patch",
@@ -67357,7 +67650,7 @@
         "x-stability": "stable"
       },
       "post": {
-        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nReturns the one-time invitation ``token`` so the admin can deliver the\ninvite link out-of-band (org invitations have no built-in email channel).",
+        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nClerk emails production invitations directly. Local development returns a\none-time token for compatibility.",
         "operationId": "create_invitation_api_v1_organization_invitations_post",
         "requestBody": {
           "content": {
@@ -67421,37 +67714,24 @@
             "description": "Unprocessable Entity"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Create an invitation",
@@ -67482,10 +67762,23 @@
             "AI_RESTRICTED_FORBIDDEN"
           ],
           "409": [
-            "CONFLICT"
+            "ALREADY_MEMBER",
+            "CONFLICT",
+            "EMAIL_IN_USE",
+            "INVITATION_EXISTS",
+            "MEMBER_INACTIVE"
           ],
           "422": [
+            "BUSINESS_EMAIL_REQUIRED",
+            "INVALID_INVITATION_ROLE",
             "VALIDATION_ERROR"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -67636,6 +67929,7 @@
             "LAST_OWNER_CANNOT_LEAVE"
           ],
           "422": [
+            "CLERK_INVITATION_REQUIRED",
             "VALIDATION_ERROR"
           ]
         },
@@ -67704,37 +67998,24 @@
             "description": "Validation Error"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Revoke an invitation",
@@ -67763,6 +68044,12 @@
           ],
           "404": [
             "NOT_FOUND"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -67775,7 +68062,7 @@
     },
     "/api/v1/organization/invitations/{invitation_id}/resend": {
       "post": {
-        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nReturns the fresh token for out-of-band delivery. Throttled per\n``invitation_resend_cooldown_seconds``. Requires owner or admin role.",
+        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nClerk sends a replacement email; local development returns a fresh token.\nThrottled per ``invitation_resend_cooldown_seconds``. Requires owner or\nadmin role.",
         "operationId": "resend_invitation_api_v1_organization_invitations__invitation_id__resend_post",
         "parameters": [
           {
@@ -67859,6 +68146,16 @@
               }
             },
             "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Resend an invitation",
@@ -67892,7 +68189,12 @@
             "CONFLICT"
           ],
           "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "INVITATION_RESEND_THROTTLED",
             "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -91409,6 +91711,130 @@
       }
     },
     "/api/v2/consumer/accommodation": {
+      "get": {
+        "description": "Return the consumer's saved accessibility accommodation.\n\n#2180: session authentication is sufficient, matching the PATCH route.\nRequiring §1681h(a)(1) identity factors here would recreate the barrier\nthat #1271 deliberately removed from accommodation preferences.",
+        "operationId": "get_accommodation_api_v2_consumer_accommodation_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccommodationUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get accommodation preferences",
+        "tags": [
+          "consumer"
+        ],
+        "x-audience": "consumer",
+        "x-error-codes": {
+          "401": [
+            "AUTHENTICATION_FAILED",
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "ACCOUNT_NOT_LINKED",
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ]
+        },
+        "x-required-org-roles": [
+          "consumer"
+        ],
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      },
       "patch": {
         "description": "Update accessibility accommodation preferences for consumer disclosures.\n\n#1271 decision 1: no §1681h(a)(1) identity gate. §1681h(a)(1) protects\nfile disclosure, not display preferences; the SSN4+DOB entry the gate\nrequires is itself the barrier the accessibility feature exists to\nprevent for its target population. Session authentication (``CurrentUser``)\nremains.\n\nPartial update: only the provided fields are modified; omitted fields\nretain their current values.",
         "operationId": "update_accommodation_api_v2_consumer_accommodation_patch",
@@ -112319,7 +112745,7 @@
         "x-stability": "stable"
       },
       "post": {
-        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nReturns the one-time invitation ``token`` so the admin can deliver the\ninvite link out-of-band (org invitations have no built-in email channel).",
+        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nClerk emails production invitations directly. Local development returns a\none-time token for compatibility.",
         "operationId": "create_invitation_api_v2_organization_invitations_post",
         "parameters": [
           {
@@ -112395,37 +112821,24 @@
             "description": "Unprocessable Entity"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Create an invitation",
@@ -112456,10 +112869,23 @@
             "AI_RESTRICTED_FORBIDDEN"
           ],
           "409": [
-            "CONFLICT"
+            "ALREADY_MEMBER",
+            "CONFLICT",
+            "EMAIL_IN_USE",
+            "INVITATION_EXISTS",
+            "MEMBER_INACTIVE"
           ],
           "422": [
+            "BUSINESS_EMAIL_REQUIRED",
+            "INVALID_INVITATION_ROLE",
             "VALIDATION_ERROR"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -112622,6 +113048,7 @@
             "LAST_OWNER_CANNOT_LEAVE"
           ],
           "422": [
+            "CLERK_INVITATION_REQUIRED",
             "VALIDATION_ERROR"
           ]
         },
@@ -112700,37 +113127,24 @@
             "description": "Validation Error"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Revoke an invitation",
@@ -112759,6 +113173,12 @@
           ],
           "404": [
             "NOT_FOUND"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -112771,7 +113191,7 @@
     },
     "/api/v2/organization/invitations/{invitation_id}/resend": {
       "post": {
-        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nReturns the fresh token for out-of-band delivery. Throttled per\n``invitation_resend_cooldown_seconds``. Requires owner or admin role.",
+        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nClerk sends a replacement email; local development returns a fresh token.\nThrottled per ``invitation_resend_cooldown_seconds``. Requires owner or\nadmin role.",
         "operationId": "resend_invitation_api_v2_organization_invitations__invitation_id__resend_post",
         "parameters": [
           {
@@ -112865,6 +113285,16 @@
               }
             },
             "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Resend an invitation",
@@ -112898,7 +113328,12 @@
             "CONFLICT"
           ],
           "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "INVITATION_RESEND_THROTTLED",
             "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
