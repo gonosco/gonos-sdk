@@ -66,7 +66,7 @@
         "type": "string"
       },
       "AccommodationUpdateResponse": {
-        "description": "Response for PATCH /consumer/accommodation.",
+        "description": "Response for GET/PATCH /consumer/accommodation.",
         "properties": {
           "accommodation_requested": {
             "anyOf": [
@@ -89,8 +89,13 @@
         "properties": {
           "adverse_actions_in_waiting_period": {
             "$ref": "#/components/schemas/AdverseActionSection",
-            "description": "Pre-notice sent, waiting period still running — no action until waiting_period_ends_at",
+            "description": "Pre-notice sent, waiting period still running — no action until waiting_period_ends_at. Excludes actions whose pre-notice bounced or failed; those are in adverse_actions_notice_bounced",
             "x-added-in": "2026-06-11"
+          },
+          "adverse_actions_notice_bounced": {
+            "$ref": "#/components/schemas/BouncedNoticeSection",
+            "description": "Adverse-action notices the mail provider reported as bounced or failed that still need action: a pre-adverse notice on an action awaiting its final notice (finalization is blocked until it is resent), or a final notice with no later delivery",
+            "x-added-in": "2026-11-24"
           },
           "adverse_actions_pending_correction_review": {
             "$ref": "#/components/schemas/CorrectionReviewSection",
@@ -99,7 +104,7 @@
           },
           "adverse_actions_ready_for_final_notice": {
             "$ref": "#/components/schemas/AdverseActionSection",
-            "description": "Pre-notice sent and waiting period elapsed — send the final notice or reconsider",
+            "description": "Pre-notice sent and waiting period elapsed — send the final notice or reconsider. Excludes actions whose pre-notice bounced or failed, which finalization refuses; those are in adverse_actions_notice_bounced",
             "x-added-in": "2026-06-11"
           },
           "disputes_corrected_without_report": {
@@ -122,6 +127,7 @@
           "reports_awaiting_review",
           "adverse_actions_ready_for_final_notice",
           "adverse_actions_in_waiting_period",
+          "adverse_actions_notice_bounced",
           "adverse_actions_pending_correction_review",
           "disputes_corrected_without_report",
           "open_disputes"
@@ -246,6 +252,13 @@
       "AdjudicationExplanationResponse": {
         "description": "Consumer-facing explanation of adjudication outcome (CFPB Circular 2024-06).\n\nProvides the disposition, the factors (matched rules) that determined it,\nand a plain-language summary so consumers can understand why their report\nreceived a particular outcome.",
         "properties": {
+          "consent_revoked": {
+            "default": false,
+            "description": "True if the org consent this report was furnished under has since been revoked. Access continues; the flag is informational.",
+            "title": "Consent Revoked",
+            "type": "boolean",
+            "x-added-in": "2026-11-22"
+          },
           "disposition": {
             "description": "Overall report disposition (clear, consider, review)",
             "title": "Disposition",
@@ -2783,9 +2796,10 @@
             "x-added-in": "2026-06-03"
           },
           "disclosure_version": {
-            "description": "Disclosure version for the hosted consent session (letters/numbers, must contain a digit, e.g. 'v1.0').",
+            "default": "current",
+            "description": "Disclosure version for hosted consent. The default 'current' follows Gonos's registered current disclosure automatically; an explicit version may be supplied to pin a document intentionally.",
             "examples": [
-              "v1.0"
+              "current"
             ],
             "maxLength": 50,
             "title": "Disclosure Version",
@@ -2879,8 +2893,7 @@
           "provider",
           "name",
           "default_package",
-          "permissible_purpose",
-          "disclosure_version"
+          "permissible_purpose"
         ],
         "title": "AtsConnectionCreate",
         "type": "object"
@@ -3477,6 +3490,92 @@
           "recorded_at"
         ],
         "title": "AuditProseEntry",
+        "type": "object"
+      },
+      "BouncedNoticeActionItem": {
+        "description": "An adverse-action notice the mail provider reported as not delivered (#2952).",
+        "properties": {
+          "adverse_action_id": {
+            "description": "Adverse action identifier",
+            "format": "uuid",
+            "title": "Adverse Action Id",
+            "type": "string",
+            "x-added-in": "2026-11-24"
+          },
+          "candidate_id": {
+            "description": "Candidate the check was run on",
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string",
+            "x-added-in": "2026-11-24"
+          },
+          "check_id": {
+            "description": "Check the adverse action belongs to",
+            "format": "uuid",
+            "title": "Check Id",
+            "type": "string",
+            "x-added-in": "2026-11-24"
+          },
+          "delivery_status": {
+            "description": "What the mail provider reported: 'bounced' (the address refused it) or 'failed' (a send error or temporary bounce)",
+            "title": "Delivery Status",
+            "type": "string",
+            "x-added-in": "2026-11-24"
+          },
+          "notice": {
+            "description": "Which notice did not arrive: 'pre_adverse' (the §1681m(a) pre-adverse notice -- resend it with POST /adverse-actions/{id}/resend-pre-notice, which restarts the waiting period) or 'final_adverse' (the final notice -- correct the candidate's address, then resend it from the adverse action in the Gonos dashboard; there is no API-key route for it)",
+            "title": "Notice",
+            "type": "string",
+            "x-added-in": "2026-11-24"
+          },
+          "notice_sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the undelivered notice was sent",
+            "title": "Notice Sent At",
+            "x-added-in": "2026-11-24"
+          }
+        },
+        "required": [
+          "adverse_action_id",
+          "check_id",
+          "candidate_id",
+          "notice",
+          "notice_sent_at",
+          "delivery_status"
+        ],
+        "title": "BouncedNoticeActionItem",
+        "type": "object"
+      },
+      "BouncedNoticeSection": {
+        "description": "Adverse-action notices that did not reach the consumer.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BouncedNoticeActionItem"
+            },
+            "title": "Items",
+            "type": "array",
+            "x-added-in": "2026-11-24"
+          },
+          "total": {
+            "description": "Total matching items (independent of limit)",
+            "title": "Total",
+            "type": "integer",
+            "x-added-in": "2026-11-24"
+          }
+        },
+        "required": [
+          "total"
+        ],
+        "title": "BouncedNoticeSection",
         "type": "object"
       },
       "Branding": {
@@ -4175,6 +4274,19 @@
             "title": "Address Zip",
             "x-added-in": "2026-02-07"
           },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'called 11/19 re missing SSN'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
+          },
           "alternate_email": {
             "anyOf": [
               {
@@ -4691,6 +4803,19 @@
             ],
             "title": "Address Zip",
             "x-added-in": "2026-02-07"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'called 11/19 re missing SSN'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
           },
           "alternate_email": {
             "anyOf": [
@@ -5794,7 +5919,7 @@
                 "type": "null"
               }
             ],
-            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Unused keys are silently ignored; a source whose adapter does not take county/state kwargs is unaffected. Values are validated at submit time against the registered adapter.",
+            "description": "Per-data-source jurisdiction override. Shape: `{<data_source>: {\"county\": \"Federal Southern District\", \"state\": \"NY\"}}`. Primarily for `informdata_criminal_federal` (Fed+): the default is Statewide-for-candidate.address_state, which misses federal records tried in other districts. A caller that knows a candidate's federal history can specify a district here. Only sources whose adapter opts into the jurisdiction contract are accepted (#2769); passing a non-jurisdictional key — OFAC, PACER, drug-test providers, etc. — is a 400 at submit, not a silent no-op. Values are validated at submit time against the registered adapter.",
             "examples": [
               {
                 "informdata_criminal_federal": {
@@ -5862,6 +5987,40 @@
             "description": "ISO 4217 currency code (e.g. USD, EUR). Defaults to USD if omitted.",
             "title": "Salary Currency",
             "x-added-in": "2026-03-04"
+          },
+          "work_address_city": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the job is physically performed — city name as free text. Normalised the same way candidate address_city is for jurisdiction lookup. Optional; see work_address_state.",
+            "examples": [
+              "Seattle"
+            ],
+            "title": "Work Address City",
+            "x-added-in": "2026-11-14"
+          },
+          "work_address_state": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the job is physically performed — US state (two-letter code preferred). For ordinances keyed on work location rather than candidate home: Seattle Mun. Code 14.17 (trigger ≥50% of hours in Seattle), ADR 0157. Optional; when unset the H-11 ban-the-box warning still fires based on candidate home address alone. Stored encrypted at rest.",
+            "examples": [
+              "WA"
+            ],
+            "title": "Work Address State",
+            "x-added-in": "2026-11-14"
           }
         },
         "required": [
@@ -5899,6 +6058,19 @@
             "title": "Adjudication Decisions",
             "type": "array",
             "x-added-in": "2026-06-11"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'waiting on candidate to upload ID copy'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
           },
           "candidate_id": {
             "description": "ID of the candidate being checked",
@@ -6873,6 +7045,19 @@
           }
         ],
         "properties": {
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Internal operator notes — free-text scratch space for ops (e.g. 'waiting on candidate to upload ID copy'). Not FCRA-consumer-visible; appears only in admin-portal surfaces.",
+            "title": "Admin Notes",
+            "x-added-in": "2026-11-21"
+          },
           "candidate_id": {
             "description": "ID of the candidate being checked",
             "examples": [
@@ -7494,9 +7679,55 @@
         "title": "ComplianceMetricsResponse",
         "type": "object"
       },
+      "ConsentFlowBranding": {
+        "description": "Resolved branding the candidate-facing page needs to render.\n\nThe candidate sees the business that procured the report, not Gonos\n— §1681b's \"clear and conspicuous\" disclosure of the user of the\nreport, and a basic conversion / trust property (a candidate who\ngets email from \"Acme HR\" must land on a page that reads as Acme,\nnot as the CRA they've never heard of).\n\n``company_name`` is RESOLVED server-side: either\n``settings.branding.company_name_override`` if set, or the org's\nown ``name``. The frontend never has to pick between them.\n\n``logo_url`` and ``primary_color`` are passed through verbatim from\n``settings.branding`` (both validated at write time on\n``organization_settings.py:158,165``) and may be null, which the\nfrontend treats as \"render the default affordance\" (no logo, use\nthe default Tailwind primary).",
+        "properties": {
+          "company_name": {
+            "description": "Resolved display name — ``company_name_override`` when set, falling back to the org's own ``name``. Always non-null so the frontend has one unambiguous string to show.",
+            "title": "Company Name",
+            "type": "string",
+            "x-added-in": "2026-11-20"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "HTTPS URL to the organization's logo, or null.",
+            "title": "Logo Url",
+            "x-added-in": "2026-11-20"
+          },
+          "primary_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hex color (e.g. #1a2b3c) for the CTA + accent, or null.",
+            "title": "Primary Color",
+            "x-added-in": "2026-11-20"
+          }
+        },
+        "required": [
+          "company_name"
+        ],
+        "title": "ConsentFlowBranding",
+        "type": "object"
+      },
       "ConsentFlowPublicResponse": {
         "description": "Session info returned to the candidate on the hosted consent page.\n\nExcludes internal fields (organization_id, token, ip_address, user_agent).\nIncludes only what the candidate needs to review and sign the disclosure.",
         "properties": {
+          "branding": {
+            "$ref": "#/components/schemas/ConsentFlowBranding",
+            "x-added-in": "2026-11-20"
+          },
           "candidate_extended_at": {
             "anyOf": [
               {
@@ -7645,7 +7876,8 @@
           "permissible_purpose",
           "locale",
           "expires_at",
-          "created_at"
+          "created_at",
+          "branding"
         ],
         "title": "ConsentFlowPublicResponse",
         "type": "object"
@@ -8286,7 +8518,6 @@
             "candidate_id": "550e8400-e29b-41d4-a716-446655440001",
             "check_id": "550e8400-e29b-41d4-a716-446655440000",
             "disclosure_type": "standalone",
-            "disclosure_version": "2.0",
             "locale": "en",
             "permissible_purpose": "employment"
           }
@@ -8329,12 +8560,19 @@
             "x-added-in": "2026-03-11"
           },
           "disclosure_version": {
-            "description": "Version of the FCRA disclosure document (e.g. 'v1.0', '2024-01')",
-            "maxLength": 20,
-            "minLength": 1,
-            "pattern": "^[a-zA-Z0-9._\\-]{1,20}$",
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "minLength": 1,
+                "pattern": "^[a-zA-Z0-9._\\-]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional disclosure version override. Omit it (recommended), or send 'current', to use Gonos's registered current FCRA disclosure. Explicit versions remain supported for clients that intentionally pin a document.",
             "title": "Disclosure Version",
-            "type": "string",
             "x-added-in": "2026-03-11"
           },
           "locale": {
@@ -8389,7 +8627,6 @@
         "required": [
           "check_id",
           "candidate_id",
-          "disclosure_version",
           "permissible_purpose"
         ],
         "title": "ConsentSessionCreate",
@@ -9691,6 +9928,13 @@
             "type": "string",
             "x-added-in": "2026-02-08"
           },
+          "consent_revoked": {
+            "default": false,
+            "description": "True if the org consent this report was furnished under has since been revoked. Access under §1681g(a) continues; the flag is informational.",
+            "title": "Consent Revoked",
+            "type": "boolean",
+            "x-added-in": "2026-11-22"
+          },
           "cra_name": {
             "anyOf": [
               {
@@ -10619,6 +10863,13 @@
             "type": "integer",
             "x-added-in": "2026-03-16"
           },
+          "adverse_actions_notice_bounced": {
+            "default": 0,
+            "description": "Adverse-action notices reported bounced or failed that still need action. One per adverse action; not counted in adverse_actions_awaiting_final_notice.",
+            "title": "Adverse Actions Notice Bounced",
+            "type": "integer",
+            "x-added-in": "2026-11-24"
+          },
           "adverse_actions_pending_correction_review": {
             "default": 0,
             "description": "Adverse actions already notified to the consumer whose report a dispute has since corrected. One per adverse action, however many corrections it carries.",
@@ -10891,7 +11142,7 @@
       },
       "DeliveryMetadataSchema": {
         "additionalProperties": true,
-        "description": "Delivery metadata for notice delivery (email, SMS, fax, etc.).",
+        "description": "Delivery metadata for notice delivery (email, SMS, fax, etc.).\n\n**Reading a bounced §1681m notice.** The receiver writes ``status`` +\n``reason`` onto this blob when the mail provider reports a bounce or a\npermanent failure. Delivered notices do NOT write ``status=\"delivered\"``\n— a successful delivery is indicated by ``delivered_at`` being set. In\nflight: ``status`` is absent and ``delivered_at`` is null.\n\n#2950: before this fix the schema typed a ``delivery_status`` field but\nno writer set it, so an integrator who branched on it to detect a\nbounced notice always saw null. ``delivery_status`` stays on the shape\nfor stability but is deprecated — branch on ``status`` (and treat\n``delivered_at`` as the signal for delivered).",
         "properties": {
           "channel": {
             "anyOf": [
@@ -10929,9 +11180,12 @@
                 "type": "null"
               }
             ],
-            "description": "Status: 'pending', 'delivered', 'bounced', or 'failed'",
+            "deprecated": true,
+            "description": "DEPRECATED (#2950). This field was documented as taking ``'pending' | 'delivered' | 'bounced' | 'failed'`` but no writer ever set it; the receiver writes ``status`` instead. Reads branch on ``status`` (bounced / failed) and ``delivered_at`` (truthy = delivered). Kept on the shape so existing SDK types continue to compile, but SDK codegen will surface the deprecation.",
             "title": "Delivery Status",
-            "x-added-in": "2026-04-01"
+            "x-added-in": "2026-04-01",
+            "x-deprecated-in": "2026-11-21",
+            "x-replaced-by": "status"
           },
           "error": {
             "anyOf": [
@@ -10945,6 +11199,19 @@
             "description": "Error message if delivery failed",
             "title": "Error",
             "x-added-in": "2026-04-01"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free-text failure reason from the provider — e.g. ``'550 5.1.1 recipient unknown'``. Populated by the mail-provider webhook (``provider_events.py``) when ``status`` is ``bounced`` or ``failed``. None otherwise.",
+            "title": "Reason",
+            "x-added-in": "2026-11-21"
           },
           "recipient_email": {
             "anyOf": [
@@ -10972,6 +11239,23 @@
             "description": "When the notice was sent",
             "title": "Sent At",
             "x-added-in": "2026-04-01"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bounced",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Receiver-written terminal failure status. ``bounced`` on a mail-provider bounce, ``failed`` on a permanent delivery failure. None when the notice is in flight OR delivered — the finalization gate (``services/adverse_action/finalization.py``) and the ``notices_bounced`` dashboard count both read this key. Replaces the always-null ``delivery_status`` label (#2950).",
+            "title": "Status",
+            "x-added-in": "2026-11-21"
           }
         },
         "title": "DeliveryMetadataSchema",
@@ -18520,6 +18804,13 @@
             "type": "string",
             "x-added-in": "2026-03-16"
           },
+          "delivery_provider": {
+            "default": "local",
+            "description": "Identity provider delivering this invitation (clerk or local)",
+            "title": "Delivery Provider",
+            "type": "string",
+            "x-added-in": "2026-06-09"
+          },
           "email": {
             "title": "Email",
             "type": "string",
@@ -18574,10 +18865,11 @@
         "type": "object"
       },
       "InvitationWithTokenResponse": {
-        "description": "Invitation record including the acceptance token.\n\nThe token is a bearer credential, so it is returned ONLY on single-record\nowner/admin actions (create and resend) for out-of-band delivery — never in\nlist responses. The org admin forwards the resulting invite link to the\ninvitee, who exchanges the token at ``POST /organization/invitations/accept``.",
+        "description": "Invitation delivery result.\n\nClerk emails production invitations directly, so ``token`` is always null\nfor Clerk delivery. The bearer token is returned only for local-development\ncompatibility and never appears in list responses.",
         "examples": [
           {
             "created_at": "2026-03-15T14:00:00Z",
+            "delivery_provider": "local",
             "email": "newuser@acmescreening.com",
             "expires_at": "2026-03-22T14:00:00Z",
             "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -18606,6 +18898,13 @@
             "title": "Created At",
             "type": "string",
             "x-added-in": "2026-03-16"
+          },
+          "delivery_provider": {
+            "default": "local",
+            "description": "Identity provider delivering this invitation (clerk or local)",
+            "title": "Delivery Provider",
+            "type": "string",
+            "x-added-in": "2026-06-09"
           },
           "email": {
             "title": "Email",
@@ -18649,9 +18948,16 @@
             "x-added-in": "2026-03-16"
           },
           "token": {
-            "description": "One-time invitation token for the accept flow",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Local-development acceptance token; null for Clerk delivery",
             "title": "Token",
-            "type": "string",
             "x-added-in": "2026-06-09"
           }
         },
@@ -18661,8 +18967,7 @@
           "email",
           "role",
           "expires_at",
-          "created_at",
-          "token"
+          "created_at"
         ],
         "title": "InvitationWithTokenResponse",
         "type": "object"
@@ -20192,6 +20497,7 @@
         "enum": [
           "pending",
           "queued",
+          "sending",
           "delivered",
           "failed",
           "cancelled"
@@ -26514,8 +26820,12 @@
         "description": "Rewind a source-of-truth deadline column on the named row.\n\nSandbox-only. Keyed on the sub-resource id the event names (not\n``check_id``) — an AA has its own identifier that outlives the\npre-notice step, and later events (dispute, ccpa_request) target\ntheir own primary keys the same way. #2719.",
         "properties": {
           "event": {
-            "const": "adverse_action.elapse_waiting_period",
-            "description": "Which deadline to elapse. Today: ``adverse_action.elapse_waiting_period`` rewinds ``pre_notice_sent_at`` + ``waiting_period_ends_at`` on the named AdverseAction so §1681b(b)(3)(A) has elapsed. Dispute + CCPA events ship as follow-up PRs (#2719).",
+            "description": "Which deadline to elapse:\n- ``adverse_action.elapse_waiting_period`` — rewinds ``pre_notice_sent_at`` + ``waiting_period_ends_at`` on the named AdverseAction so §1681b(b)(3)(A) has elapsed.\n- ``dispute.elapse_reinvestigation_deadline`` (#2719 A3) — rewinds ``Dispute.investigation_deadline`` and ``extended_deadline`` (when set) so ``dispute_overdue_criteria`` reads the dispute as past-due.\n- ``ccpa_request.elapse_deletion_sla`` (#2719 A4) — rewinds ``Candidate.deletion_requested_at`` so the retention sweep sees the request as past the CCPA 45-day cutoff.",
+            "enum": [
+              "adverse_action.elapse_waiting_period",
+              "dispute.elapse_reinvestigation_deadline",
+              "ccpa_request.elapse_deletion_sla"
+            ],
             "examples": [
               "adverse_action.elapse_waiting_period"
             ],
@@ -26524,7 +26834,7 @@
             "x-added-in": "2026-11-06"
           },
           "target_id": {
-            "description": "UUID of the row to rewind. For ``adverse_action.elapse_waiting_period`` this is the AdverseAction.id (NOT the check_id or candidate_id).",
+            "description": "UUID of the row to rewind. The event names which column's owner it keys on:\n- ``adverse_action.elapse_waiting_period`` → ``AdverseAction.id``\n- ``dispute.elapse_reinvestigation_deadline`` → ``Dispute.id``\n- ``ccpa_request.elapse_deletion_sla`` → ``Candidate.id`` (the row that carries ``deletion_requested_at``).",
             "examples": [
               "3fa85f64-5717-4562-b3fc-2c963f66afa6"
             ],
@@ -26909,7 +27219,6 @@
         "examples": [
           {
             "certification_text_hash": "sha256:81e0a86850166b9618e9c6f52788a4a13fb9d36e5ac911a911143b4fc9ab819c",
-            "disclosure_version": "2.0",
             "email": "jane@example.com",
             "external_id": "worker-4821",
             "first_name": "Jane",
@@ -27015,10 +27324,17 @@
             "x-added-in": "2026-08-07"
           },
           "disclosure_version": {
-            "description": "Version of the FCRA disclosure you are presenting (e.g. '2.0').",
-            "maxLength": 20,
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional disclosure version override. Omit it to use Gonos's registered current FCRA disclosure.",
             "title": "Disclosure Version",
-            "type": "string",
             "x-added-in": "2026-08-07"
           },
           "email": {
@@ -27184,8 +27500,7 @@
           "first_name",
           "last_name",
           "permissible_purpose",
-          "purpose_certification",
-          "disclosure_version"
+          "purpose_certification"
         ],
         "title": "ScreeningCreate",
         "type": "object"
@@ -29952,7 +30267,7 @@
             "items": {
               "$ref": "#/components/schemas/WebhookEventType"
             },
-            "maxItems": 55,
+            "maxItems": 58,
             "title": "Events",
             "type": "array",
             "x-added-in": "2026-02-07"
@@ -30319,10 +30634,13 @@
           "adverse_action.finalized",
           "adverse_action.created",
           "adverse_action.cancelled",
+          "adverse_action.withdrawn",
           "adverse_action.completed",
           "adjudication_decision.recorded",
           "action_items.escalated",
           "check.failed",
+          "check.expired",
+          "check.consent_invalid",
           "consent.revoked",
           "dispute.resolved",
           "dispute.filed",
@@ -45794,6 +46112,96 @@
         "x-stability": "stable"
       }
     },
+    "/api/v1/consent-flow/{token}/branding": {
+      "get": {
+        "description": "Return just the org's branding for a hosted consent-link token.\n\n#2951 part B: the Next.js app renders the candidate-facing landing\npage server-side. To make the branded header visible at first paint\n(rather than after the SPA hydrates and the full ``/{token}``\nresponse lands), SSR calls this lightweight route. It returns only\nthe ``ConsentFlowBranding`` from the same resolver the full endpoint\nuses, so first paint cannot drift from the hydrated view.\n\nNo ``mark_viewed`` side effect: a prefetch is not a view. An email\npreview bot opening the link must not consume the §1681b(b)(1)\ndisclosure window on behalf of the candidate.\n\nReachable for terminal sessions (EXPIRED / COMPLETED / CANCELLED)\ntoo — the error screen the SPA then shows also needs branding, or\nan expired link lands on Gonos chrome, which is the exact bug\nthis fix closes.\n\nNo authentication required — the token provides access, same as\n``GET /consent-flow/{token}``.",
+        "operationId": "prefetch_consent_session_branding_api_v1_consent_flow__token__branding_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentFlowBranding"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded (10 req/60s per token)"
+          }
+        },
+        "summary": "Prefetch branding for SSR skeleton (candidate-facing)",
+        "tags": [
+          "consent-sessions"
+        ],
+        "x-audience": "public",
+        "x-error-codes": {
+          "401": [
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ],
+          "422": [
+            "RATE_LIMIT_EXCEEDED"
+          ]
+        },
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      }
+    },
     "/api/v1/consent-flow/{token}/extend": {
       "post": {
         "description": "Grant a one-time extension to a consent session (candidate-initiated).\n\nAdds ``CANDIDATE_EXTEND_MINUTES`` (currently +30 min) to\n``expires_at`` and marks ``candidate_extended_at``. Only allowed\nonce per session — subsequent calls return 409\n``EXTENSION_ALREADY_USED``. Only valid while the session is\nPENDING or VIEWED and not yet past its (current) expiry.\n\nDeliberately no IP-binding check: a candidate switching networks\nmid-flow (Wi-Fi → cellular, VPN drop) is exactly who needs to\nextend most.\n\nThe token provides authentication.",
@@ -47340,6 +47748,108 @@
       }
     },
     "/api/v1/consumer/accommodation": {
+      "get": {
+        "description": "Return the consumer's saved accessibility accommodation.\n\n#2180: session authentication is sufficient, matching the PATCH route.\nRequiring §1681h(a)(1) identity factors here would recreate the barrier\nthat #1271 deliberately removed from accommodation preferences.",
+        "operationId": "get_accommodation_api_v1_consumer_accommodation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccommodationUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get accommodation preferences",
+        "tags": [
+          "consumer"
+        ],
+        "x-audience": "consumer",
+        "x-error-codes": {
+          "401": [
+            "AUTHENTICATION_FAILED",
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "ACCOUNT_NOT_LINKED",
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ]
+        },
+        "x-required-org-roles": [
+          "consumer"
+        ],
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      },
       "patch": {
         "description": "Update accessibility accommodation preferences for consumer disclosures.\n\n#1271 decision 1: no §1681h(a)(1) identity gate. §1681h(a)(1) protects\nfile disclosure, not display preferences; the SSN4+DOB entry the gate\nrequires is itself the barrier the accessibility feature exists to\nprevent for its target population. Session authentication (``CurrentUser``)\nremains.\n\nPartial update: only the provided fields are modified; omitted fields\nretain their current values.",
         "operationId": "update_accommodation_api_v1_consumer_accommodation_patch",
@@ -57753,7 +58263,7 @@
     },
     "/api/v1/consumer/reports": {
       "get": {
-        "description": "List all background check reports for the authenticated consumer.\n\nReturns reports from the consumer's file per §1681g(a), excluding\nsuperseded versions and revoked-consent reports. Identity verification\nrequired via X-Identity-SSN4 and X-Identity-DOB headers per §1681h(a)(1).",
+        "description": "List all background check reports for the authenticated consumer.\n\nReturns reports from the consumer's file per §1681g(a), excluding\nsuperseded versions. Reports whose underlying org consent has since\nbeen revoked are included and annotated ``consent_revoked: true``\n(ADR 0162 / #1033) — consumer access under §1681g is not gated on\nthe org's authority. Identity verification required via\nX-Identity-SSN4 and X-Identity-DOB headers per §1681h(a)(1).",
         "operationId": "list_consumer_reports_api_v1_consumer_reports_get",
         "parameters": [
           {
@@ -58124,7 +58634,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -58316,7 +58825,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -58536,7 +59044,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -58738,7 +59245,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -58961,7 +59467,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -67357,7 +67862,7 @@
         "x-stability": "stable"
       },
       "post": {
-        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nReturns the one-time invitation ``token`` so the admin can deliver the\ninvite link out-of-band (org invitations have no built-in email channel).",
+        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nClerk emails production invitations directly. Local development returns a\none-time token for compatibility.",
         "operationId": "create_invitation_api_v1_organization_invitations_post",
         "requestBody": {
           "content": {
@@ -67421,37 +67926,24 @@
             "description": "Unprocessable Entity"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Create an invitation",
@@ -67482,10 +67974,23 @@
             "AI_RESTRICTED_FORBIDDEN"
           ],
           "409": [
-            "CONFLICT"
+            "ALREADY_MEMBER",
+            "CONFLICT",
+            "EMAIL_IN_USE",
+            "INVITATION_EXISTS",
+            "MEMBER_INACTIVE"
           ],
           "422": [
+            "BUSINESS_EMAIL_REQUIRED",
+            "INVALID_INVITATION_ROLE",
             "VALIDATION_ERROR"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -67636,6 +68141,7 @@
             "LAST_OWNER_CANNOT_LEAVE"
           ],
           "422": [
+            "CLERK_INVITATION_REQUIRED",
             "VALIDATION_ERROR"
           ]
         },
@@ -67704,37 +68210,24 @@
             "description": "Validation Error"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Revoke an invitation",
@@ -67763,6 +68256,12 @@
           ],
           "404": [
             "NOT_FOUND"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -67775,7 +68274,7 @@
     },
     "/api/v1/organization/invitations/{invitation_id}/resend": {
       "post": {
-        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nReturns the fresh token for out-of-band delivery. Throttled per\n``invitation_resend_cooldown_seconds``. Requires owner or admin role.",
+        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nClerk sends a replacement email; local development returns a fresh token.\nThrottled per ``invitation_resend_cooldown_seconds``. Requires owner or\nadmin role.",
         "operationId": "resend_invitation_api_v1_organization_invitations__invitation_id__resend_post",
         "parameters": [
           {
@@ -67859,6 +68358,16 @@
               }
             },
             "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Resend an invitation",
@@ -67892,7 +68401,12 @@
             "CONFLICT"
           ],
           "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "INVITATION_RESEND_THROTTLED",
             "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -89833,6 +90347,106 @@
         "x-stability": "stable"
       }
     },
+    "/api/v2/consent-flow/{token}/branding": {
+      "get": {
+        "description": "Return just the org's branding for a hosted consent-link token.\n\n#2951 part B: the Next.js app renders the candidate-facing landing\npage server-side. To make the branded header visible at first paint\n(rather than after the SPA hydrates and the full ``/{token}``\nresponse lands), SSR calls this lightweight route. It returns only\nthe ``ConsentFlowBranding`` from the same resolver the full endpoint\nuses, so first paint cannot drift from the hydrated view.\n\nNo ``mark_viewed`` side effect: a prefetch is not a view. An email\npreview bot opening the link must not consume the §1681b(b)(1)\ndisclosure window on behalf of the candidate.\n\nReachable for terminal sessions (EXPIRED / COMPLETED / CANCELLED)\ntoo — the error screen the SPA then shows also needs branding, or\nan expired link lands on Gonos chrome, which is the exact bug\nthis fix closes.\n\nNo authentication required — the token provides access, same as\n``GET /consent-flow/{token}``.",
+        "operationId": "prefetch_consent_session_branding_api_v2_consent_flow__token__branding_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentFlowBranding"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded (10 req/60s per token)"
+          }
+        },
+        "summary": "Prefetch branding for SSR skeleton (candidate-facing)",
+        "tags": [
+          "consent-sessions"
+        ],
+        "x-audience": "public",
+        "x-error-codes": {
+          "401": [
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ],
+          "422": [
+            "RATE_LIMIT_EXCEEDED"
+          ]
+        },
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      }
+    },
     "/api/v2/consent-flow/{token}/extend": {
       "post": {
         "description": "Grant a one-time extension to a consent session (candidate-initiated).\n\nAdds ``CANDIDATE_EXTEND_MINUTES`` (currently +30 min) to\n``expires_at`` and marks ``candidate_extended_at``. Only allowed\nonce per session — subsequent calls return 409\n``EXTENSION_ALREADY_USED``. Only valid while the session is\nPENDING or VIEWED and not yet past its (current) expiry.\n\nDeliberately no IP-binding check: a candidate switching networks\nmid-flow (Wi-Fi → cellular, VPN drop) is exactly who needs to\nextend most.\n\nThe token provides authentication.",
@@ -91409,6 +92023,130 @@
       }
     },
     "/api/v2/consumer/accommodation": {
+      "get": {
+        "description": "Return the consumer's saved accessibility accommodation.\n\n#2180: session authentication is sufficient, matching the PATCH route.\nRequiring §1681h(a)(1) identity factors here would recreate the barrier\nthat #1271 deliberately removed from accommodation preferences.",
+        "operationId": "get_accommodation_api_v2_consumer_accommodation_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccommodationUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the rate limit window resets. Always 60.",
+                "schema": {
+                  "example": 60,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Maximum requests allowed per 60-second window for this tier.",
+                "schema": {
+                  "example": 120,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Number of requests remaining in the current window.",
+                "schema": {
+                  "example": 0,
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Seconds until the current rate limit window resets.",
+                "schema": {
+                  "example": 42,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get accommodation preferences",
+        "tags": [
+          "consumer"
+        ],
+        "x-audience": "consumer",
+        "x-error-codes": {
+          "401": [
+            "AUTHENTICATION_FAILED",
+            "API_KEY_REMINT_REQUIRED",
+            "PROVIDER_AUTH_DISABLED",
+            "PROVIDER_AUTH_MISCONFIGURED",
+            "PROVIDER_AUTH_UNAVAILABLE",
+            "PROVIDER_TOKEN_EXPIRED",
+            "PROVIDER_TOKEN_INVALID",
+            "PROVIDER_USER_NOT_PROVISIONED"
+          ],
+          "402": [
+            "SUBSCRIPTION_SUSPENDED"
+          ],
+          "403": [
+            "ACCOUNT_NOT_LINKED",
+            "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
+            "AI_RESTRICTED_FORBIDDEN"
+          ],
+          "404": [
+            "NOT_FOUND"
+          ]
+        },
+        "x-required-org-roles": [
+          "consumer"
+        ],
+        "x-required-scopes": [],
+        "x-stability": "stable"
+      },
       "patch": {
         "description": "Update accessibility accommodation preferences for consumer disclosures.\n\n#1271 decision 1: no §1681h(a)(1) identity gate. §1681h(a)(1) protects\nfile disclosure, not display preferences; the SSN4+DOB entry the gate\nrequires is itself the barrier the accessibility feature exists to\nprevent for its target population. Session authentication (``CurrentUser``)\nremains.\n\nPartial update: only the provided fields are modified; omitted fields\nretain their current values.",
         "operationId": "update_accommodation_api_v2_consumer_accommodation_patch",
@@ -102526,7 +103264,7 @@
     },
     "/api/v2/consumer/reports": {
       "get": {
-        "description": "List all background check reports for the authenticated consumer.\n\nReturns reports from the consumer's file per §1681g(a), excluding\nsuperseded versions and revoked-consent reports. Identity verification\nrequired via X-Identity-SSN4 and X-Identity-DOB headers per §1681h(a)(1).",
+        "description": "List all background check reports for the authenticated consumer.\n\nReturns reports from the consumer's file per §1681g(a), excluding\nsuperseded versions. Reports whose underlying org consent has since\nbeen revoked are included and annotated ``consent_revoked: true``\n(ADR 0162 / #1033) — consumer access under §1681g is not gated on\nthe org's authority. Identity verification required via\nX-Identity-SSN4 and X-Identity-DOB headers per §1681h(a)(1).",
         "operationId": "list_consumer_reports_api_v2_consumer_reports_get",
         "parameters": [
           {
@@ -102917,7 +103655,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -103119,7 +103856,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -103349,7 +104085,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -103561,7 +104296,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -103794,7 +104528,6 @@
           ],
           "403": [
             "AUTHORIZATION_FAILED",
-            "CONSENT_REVOKED",
             "SANDBOX_KEY_REQUIRES_FIXTURE_LAST_NAME",
             "AI_RESTRICTED_FORBIDDEN"
           ],
@@ -112319,7 +113052,7 @@
         "x-stability": "stable"
       },
       "post": {
-        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nReturns the one-time invitation ``token`` so the admin can deliver the\ninvite link out-of-band (org invitations have no built-in email channel).",
+        "description": "Invite a user to join the organization. Requires owner or admin role.\n\nClerk emails production invitations directly. Local development returns a\none-time token for compatibility.",
         "operationId": "create_invitation_api_v2_organization_invitations_post",
         "parameters": [
           {
@@ -112395,37 +113128,24 @@
             "description": "Unprocessable Entity"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Create an invitation",
@@ -112456,10 +113176,23 @@
             "AI_RESTRICTED_FORBIDDEN"
           ],
           "409": [
-            "CONFLICT"
+            "ALREADY_MEMBER",
+            "CONFLICT",
+            "EMAIL_IN_USE",
+            "INVITATION_EXISTS",
+            "MEMBER_INACTIVE"
           ],
           "422": [
+            "BUSINESS_EMAIL_REQUIRED",
+            "INVALID_INVITATION_ROLE",
             "VALIDATION_ERROR"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -112622,6 +113355,7 @@
             "LAST_OWNER_CANNOT_LEAVE"
           ],
           "422": [
+            "CLERK_INVITATION_REQUIRED",
             "VALIDATION_ERROR"
           ]
         },
@@ -112700,37 +113434,24 @@
             "description": "Validation Error"
           },
           "429": {
-            "description": "Rate limit exceeded. Tiers: auth endpoints 10 rpm, consumer endpoints 60 rpm, platform endpoints 120 rpm.",
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds until the rate limit window resets. Always 60.",
+            "content": {
+              "application/json": {
                 "schema": {
-                  "example": 60,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Limit": {
-                "description": "Maximum requests allowed per 60-second window for this tier.",
-                "schema": {
-                  "example": 120,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Remaining": {
-                "description": "Number of requests remaining in the current window.",
-                "schema": {
-                  "example": 0,
-                  "type": "integer"
-                }
-              },
-              "X-RateLimit-Reset": {
-                "description": "Seconds until the current rate limit window resets.",
-                "schema": {
-                  "example": 42,
-                  "type": "integer"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Revoke an invitation",
@@ -112759,6 +113480,12 @@
           ],
           "404": [
             "NOT_FOUND"
+          ],
+          "429": [
+            "INVITATION_DELIVERY_THROTTLED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
@@ -112771,7 +113498,7 @@
     },
     "/api/v2/organization/invitations/{invitation_id}/resend": {
       "post": {
-        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nReturns the fresh token for out-of-band delivery. Throttled per\n``invitation_resend_cooldown_seconds``. Requires owner or admin role.",
+        "description": "Re-issue a pending invitation: rotate its token and extend the expiry.\n\nClerk sends a replacement email; local development returns a fresh token.\nThrottled per ``invitation_resend_cooldown_seconds``. Requires owner or\nadmin role.",
         "operationId": "resend_invitation_api_v2_organization_invitations__invitation_id__resend_post",
         "parameters": [
           {
@@ -112865,6 +113592,16 @@
               }
             },
             "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Resend an invitation",
@@ -112898,7 +113635,12 @@
             "CONFLICT"
           ],
           "429": [
+            "INVITATION_DELIVERY_THROTTLED",
+            "INVITATION_RESEND_THROTTLED",
             "RATE_LIMIT_EXCEEDED"
+          ],
+          "503": [
+            "SERVICE_UNAVAILABLE"
           ]
         },
         "x-required-org-roles": [
